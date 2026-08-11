@@ -8,18 +8,34 @@ requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.5.5",
     "folium>=0.20.0",
+    "loguru>=0.7.3",
     "polars>=1.43.2",
     "pooch>=1.9.0",
     "pydantic>=2.13.4",
     "pydeck>=0.9.3",
     "pyyaml>=6.0.3",
+    "tqdm>=4.70.0",
 ]
 
 [tool.uv]
 package = false
 
+[tool.mypy]
+files = ["src"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = "pooch"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
+    "mypy>=2.3.0",
     "pytest>=9.1.1",
     "ruff>=0.16.2",
+    "types-pyyaml>=6.0.12.20260724",
+    "types-tqdm>=4.70.0.20260805",
 ]

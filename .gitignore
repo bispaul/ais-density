@@ -1,6 +1,7 @@
 # Data
 data/raw/
 data/interim/
+data/run_ledger.csv
 
 # Python
 __pycache__/
