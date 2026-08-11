@@ -14,6 +14,10 @@ REGISTRY_PATH = RAW_DIR / "registry.txt"
 
 _CHUNK = 1 << 20
 
+# We log downloads ourselves and record hashes in the registry, so silence
+# pooch's per-file URL and "use this value as known_hash" notices.
+pooch.get_logger().setLevel("WARNING")
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
