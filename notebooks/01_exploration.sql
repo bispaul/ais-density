@@ -114,6 +114,49 @@ FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true
 GROUP BY date, vessel_type
 ORDER BY date, cnt desc;
 
+-- ── Composition with human-readable type labels ───────────────────────────
+-- Joins vessel_type against the vendored ITU-R M.1371 lookup (sourced from the
+-- pyais ShipType enum). LEFT JOIN so unknown/0 codes still show as 'Not available'.
+SELECT vt.label AS vessel_type,
+       count(DISTINCT p.mmsi) AS vessels,
+       count(*)               AS pings
+FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true) AS p
+LEFT JOIN read_csv_auto('data/static/vessel_type_codes.csv') AS vt
+       ON p.vessel_type = vt.code
+GROUP BY vt.label
+ORDER BY pings DESC;
+
+-- ── Composition rolled up to the broad category ───────────────────────────
+-- Groups by the tens-block category from the lookup. The COALESCE derives a
+-- category by range for codes absent from the lookup (reserved slots like 8/39):
+-- NULL vessel_type is genuinely 'Not available'; 1-19 are 'Reserved'.
+WITH labelled AS (
+  SELECT p.mmsi,
+         coalesce(vt.category,
+                  CASE
+                    WHEN p.vessel_type IS NULL           THEN 'Not available'
+                    WHEN p.vessel_type BETWEEN 1  AND 19 THEN 'Reserved'
+                    WHEN p.vessel_type BETWEEN 20 AND 29 THEN 'WIG'
+                    WHEN p.vessel_type BETWEEN 30 AND 39 THEN 'Special craft'
+                    WHEN p.vessel_type BETWEEN 40 AND 49 THEN 'High-speed craft'
+                    WHEN p.vessel_type BETWEEN 50 AND 59 THEN 'Special craft'
+                    WHEN p.vessel_type BETWEEN 60 AND 69 THEN 'Passenger'
+                    WHEN p.vessel_type BETWEEN 70 AND 79 THEN 'Cargo'
+                    WHEN p.vessel_type BETWEEN 80 AND 89 THEN 'Tanker'
+                    WHEN p.vessel_type BETWEEN 90 AND 99 THEN 'Other'
+                    ELSE 'Unknown (code ' || p.vessel_type || ')'
+                  END) AS category
+  FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true) AS p
+  LEFT JOIN read_csv_auto('data/static/vessel_type_codes.csv') AS vt
+         ON p.vessel_type = vt.code
+)
+SELECT category,
+       count(DISTINCT mmsi) AS vessels,
+       count(*)             AS pings
+FROM labelled
+GROUP BY category
+ORDER BY pings DESC;
+
 -- ── Region rollup (region parsed from the path) ───────────────────────────
 -- region isn't a Hive column (folder is a bare `la_long_beach/`, not
 -- `region=...`), so recover it from the file path with filename = true.

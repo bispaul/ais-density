@@ -1,0 +1,62 @@
+code,label,category
+0,Not available,Not available
+20,Wing in ground (WIG),WIG
+21,WIG Hazardous category A,WIG
+22,WIG Hazardous category B,WIG
+23,WIG Hazardous category C,WIG
+24,WIG Hazardous category D,WIG
+25,WIG Reserved,WIG
+29,WIG No additional information,WIG
+30,Fishing,Special craft
+31,Towing,Special craft
+32,Towing length over 200m,Special craft
+33,Dredging or underwater ops,Special craft
+34,Diving ops,Special craft
+35,Military ops,Special craft
+36,Sailing,Special craft
+37,Pleasure craft,Special craft
+40,High speed craft (HSC),High-speed craft
+41,HSC Hazardous category A,High-speed craft
+42,HSC Hazardous category B,High-speed craft
+43,HSC Hazardous category C,High-speed craft
+44,HSC Hazardous category D,High-speed craft
+45,HSC Reserved,High-speed craft
+49,HSC No additional information,High-speed craft
+50,Pilot vessel,Special craft
+51,Search and rescue vessel,Special craft
+52,Tug,Special craft
+53,Port tender,Special craft
+54,Anti-pollution equipment,Special craft
+55,Law enforcement,Special craft
+56,Spare - local vessel,Special craft
+57,Spare - local vessel,Special craft
+58,Medical transport,Special craft
+59,Noncombatant ship,Special craft
+60,Passenger,Passenger
+61,Passenger Hazardous category A,Passenger
+62,Passenger Hazardous category B,Passenger
+63,Passenger Hazardous category C,Passenger
+64,Passenger Hazardous category D,Passenger
+65,Passenger Reserved,Passenger
+69,Passenger No additional information,Passenger
+70,Cargo,Cargo
+71,Cargo Hazardous category A,Cargo
+72,Cargo Hazardous category B,Cargo
+73,Cargo Hazardous category C,Cargo
+74,Cargo Hazardous category D,Cargo
+75,Cargo Reserved,Cargo
+79,Cargo No additional information,Cargo
+80,Tanker,Tanker
+81,Tanker Hazardous category A,Tanker
+82,Tanker Hazardous category B,Tanker
+83,Tanker Hazardous category C,Tanker
+84,Tanker Hazardous category D,Tanker
+85,Tanker Reserved,Tanker
+89,Tanker No additional information,Tanker
+90,Other type,Other
+91,Other type Hazardous category A,Other
+92,Other type Hazardous category B,Other
+93,Other type Hazardous category C,Other
+94,Other type Hazardous category D,Other
+95,Other type Reserved,Other
+99,Other type No additional information,Other
