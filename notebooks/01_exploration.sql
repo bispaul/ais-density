@@ -172,3 +172,52 @@ FROM read_parquet('data/interim/*/date=*/part.parquet',
                   filename = true)
 GROUP BY region, date
 ORDER BY date;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- H3 grid outputs (data/processed/<region>/), produced by src/grid.py.
+-- ══════════════════════════════════════════════════════════════════════════
+
+-- ── cells.parquet: headline density per H3 cell ───────────────────────────
+-- Top cells by unique-vessel count (the honest density metric). pings is a
+-- secondary column — a berth/anchorage can have few vessels but many pings.
+SELECT cell_hex, vessels, pings,
+       round(median_sog, 1) AS med_sog,
+       round(avg_sog, 1)    AS avg_sog
+FROM 'data/processed/la_long_beach/cells.parquet'
+ORDER BY vessels DESC
+LIMIT 10;
+
+-- Grid totals / sanity check. NB: sum(vessels) counts vessel-per-cell pairs,
+-- not globally unique vessels (a vessel crossing cells is counted in each).
+SELECT count(*)     AS cells,
+       sum(vessels) AS vessel_cell_pairs,
+       sum(pings)   AS total_pings
+FROM 'data/processed/la_long_beach/cells.parquet';
+
+-- ── cells_by_type.parquet: composition by vessel category ─────────────────
+-- Rolls the per-cell × category grid up to category totals.
+SELECT category,
+       count(*)                  AS cells,
+       sum(pings)                AS pings,
+       round(avg(median_sog), 1) AS med_sog
+FROM 'data/processed/la_long_beach/cells_by_type.parquet'
+GROUP BY category
+ORDER BY pings DESC;
+
+-- ── cells_by_hour.parquet: diurnal pattern ────────────────────────────────
+-- Pings and active cells by hour-of-day (0-23) — when is the port busiest.
+SELECT hour,
+       sum(pings) AS pings,
+       count(*)   AS active_cells
+FROM 'data/processed/la_long_beach/cells_by_hour.parquet'
+GROUP BY hour
+ORDER BY hour;
+
+-- ── All regions at once (region parsed from the path) ─────────────────────
+-- Glob across every region's cells.parquet; region is a bare folder, so
+-- recover it from the file path with filename = true.
+SELECT regexp_extract(filename, 'processed/([^/]+)/', 1) AS region,
+       count(*)     AS cells,
+       sum(vessels) AS vessel_cell_pairs
+FROM read_parquet('data/processed/*/cells.parquet', filename = true)
+GROUP BY region;
