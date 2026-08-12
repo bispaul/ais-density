@@ -1,11 +1,12 @@
 import argparse
+from datetime import timedelta
 from pathlib import Path
 
 import duckdb
 from duckdb import DuckDBPyConnection
 from loguru import logger
 
-from src.config import Config, load_config
+from src.config import Config, Window, load_config
 
 INTERIM_DIR = Path("data/interim")
 PROCESSED_DIR = Path("data/processed")
@@ -36,36 +37,46 @@ _CATEGORY_EXPR = """coalesce(vt.category, CASE
     ELSE 'Unknown' END)"""
 
 
-def _interim_glob(interim_dir: Path, region: str) -> str:
-    return str(interim_dir / region / "date=*" / "part.parquet")
+def _window_paths(interim_dir: Path, region: str, window: Window) -> list[str]:
+    """Interim partitions for a window's date range that actually exist on disk."""
+    paths: list[str] = []
+    day = window.start
+    while day <= window.end:
+        part = interim_dir / region / f"date={day:%Y-%m-%d}" / "part.parquet"
+        if part.exists():
+            paths.append(str(part))
+        day += timedelta(days=1)
+    return paths
 
 
-def _base_cte(glob: str, resolution: int) -> str:
+def _base_cte(paths: list[str], resolution: int) -> str:
+    files = ", ".join(f"'{p}'" for p in paths)
     return (
         "WITH src AS ("
         f"SELECT h3_latlng_to_cell(latitude, longitude, {resolution}) AS cell, "
         "mmsi, sog, vessel_type, hour(base_date_time) AS hour "
-        f"FROM read_parquet('{glob}'))"
+        f"FROM read_parquet([{files}]))"
     )
 
 
-def grid_region(
+def grid_window(
     con: DuckDBPyConnection,
     region: str,
+    window_name: str,
+    window: Window,
     resolution: int,
     *,
     force: bool = False,
     interim_dir: Path = INTERIM_DIR,
     processed_dir: Path = PROCESSED_DIR,
 ) -> dict[str, Path]:
-    """Aggregate a region's cleaned pings onto an H3 grid, writing three parquets."""
-    if not (interim_dir / region).is_dir():
-        logger.warning("skip {} — no interim data at {}", region, interim_dir / region)
+    """Aggregate one region-window onto an H3 grid, writing three parquets."""
+    paths = _window_paths(interim_dir, region, window)
+    if not paths:
+        logger.warning("skip {}/{} — no interim data for window", region, window_name)
         return {}
 
-    glob = _interim_glob(interim_dir, region)
-    base = _base_cte(glob, resolution)
-    out_dir = processed_dir / region
+    out_dir = processed_dir / f"region={region}" / f"window={window_name}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cells = out_dir / "cells.parquet"
@@ -74,9 +85,10 @@ def grid_region(
 
     outputs = {"cells": cells, "cells_by_type": by_type, "cells_by_hour": by_hour}
     if not force and all(p.exists() for p in outputs.values()):
-        logger.info("skip {} — grid outputs exist", region)
+        logger.info("skip {}/{} — grid outputs exist", region, window_name)
         return outputs
 
+    base = _base_cte(paths, resolution)
     con.execute(
         f"COPY ({base} "
         f"SELECT cell, h3_h3_to_string(cell) AS cell_hex, {_METRICS} "
@@ -99,43 +111,62 @@ def grid_region(
 
     n_cells = con.execute(f"SELECT count(*) FROM read_parquet('{cells}')").fetchone()
     assert n_cells is not None
-    logger.info("{} res={}: {} cells -> {}", region, resolution, n_cells[0], out_dir)
+    logger.info(
+        "{}/{} res={}: {} cells -> {}",
+        region,
+        window_name,
+        resolution,
+        n_cells[0],
+        out_dir,
+    )
     return outputs
 
 
-def grid_all(config: Config, *, force: bool = False) -> dict[str, dict[str, Path]]:
+def _connect() -> DuckDBPyConnection:
     con = duckdb.connect()
     con.execute("INSTALL h3 FROM community;")
     con.execute("LOAD h3;")
-    outputs: dict[str, dict[str, Path]] = {}
+    return con
+
+
+def grid_all(
+    config: Config, *, force: bool = False
+) -> dict[str, dict[str, dict[str, Path]]]:
+    con = _connect()
+    outputs: dict[str, dict[str, dict[str, Path]]] = {}
     for region in config.regions:
-        result = grid_region(con, region, config.resolution_for(region), force=force)
-        if result:
-            outputs[region] = result
+        resolution = config.resolution_for(region)
+        for window_name, window in config.windows.items():
+            result = grid_window(
+                con, region, window_name, window, resolution, force=force
+            )
+            if result:
+                outputs.setdefault(region, {})[window_name] = result
     return outputs
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Aggregate cleaned AIS partitions onto an H3 grid."
+        description="Aggregate cleaned AIS partitions onto an H3 grid, per window."
     )
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     parser.add_argument("--region", help="limit to a single region (default: all)")
     parser.add_argument(
         "--force",
         action="store_true",
-        help="recompute even if the region's grid outputs already exist",
+        help="recompute even if the window's grid outputs already exist",
     )
     args = parser.parse_args()
 
     config = load_config(args.config)
-    if args.region:
-        con = duckdb.connect()
-        con.execute("INSTALL h3 FROM community;")
-        con.execute("LOAD h3;")
-        grid_region(con, args.region, config.resolution_for(args.region), force=args.force)
-    else:
+    if not args.region:
         grid_all(config, force=args.force)
+        return
+
+    con = _connect()
+    resolution = config.resolution_for(args.region)
+    for window_name, window in config.windows.items():
+        grid_window(con, args.region, window_name, window, resolution, force=args.force)
 
 
 if __name__ == "__main__":

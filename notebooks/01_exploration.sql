@@ -174,25 +174,31 @@ GROUP BY region, date
 ORDER BY date;
 
 -- ══════════════════════════════════════════════════════════════════════════
--- H3 grid outputs (data/processed/<region>/), produced by src/grid.py.
+-- H3 grid outputs, produced by src/grid.py. Partitioned by region and window:
+--   data/processed/region=<region>/window=<window>/{cells,cells_by_type,cells_by_hour}.parquet
+-- hive_partitioning = true exposes `region` and `window` as columns.
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ── cells.parquet: headline density per H3 cell ───────────────────────────
 -- Top cells by unique-vessel count (the honest density metric). pings is a
 -- secondary column — a berth/anchorage can have few vessels but many pings.
-SELECT cell_hex, vessels, pings,
+SELECT region, "window", cell_hex, vessels, pings,
        round(median_sog, 1) AS med_sog,
        round(avg_sog, 1)    AS avg_sog
-FROM 'data/processed/la_long_beach/cells.parquet'
+FROM read_parquet('data/processed/region=*/window=*/cells.parquet',
+                  hive_partitioning = true)
 ORDER BY vessels DESC
 LIMIT 10;
 
--- Grid totals / sanity check. NB: sum(vessels) counts vessel-per-cell pairs,
+-- Grid totals per region-window. NB: sum(vessels) counts vessel-per-cell pairs,
 -- not globally unique vessels (a vessel crossing cells is counted in each).
-SELECT count(*)     AS cells,
+SELECT region, "window",
+       count(*)     AS cells,
        sum(vessels) AS vessel_cell_pairs,
        sum(pings)   AS total_pings
-FROM 'data/processed/la_long_beach/cells.parquet';
+FROM read_parquet('data/processed/region=*/window=*/cells.parquet',
+                  hive_partitioning = true)
+GROUP BY region, "window";
 
 -- ── cells_by_type.parquet: composition by vessel category ─────────────────
 -- Rolls the per-cell × category grid up to category totals.
@@ -200,7 +206,8 @@ SELECT category,
        count(*)                  AS cells,
        sum(pings)                AS pings,
        round(avg(median_sog), 1) AS med_sog
-FROM 'data/processed/la_long_beach/cells_by_type.parquet'
+FROM read_parquet('data/processed/region=*/window=*/cells_by_type.parquet',
+                  hive_partitioning = true)
 GROUP BY category
 ORDER BY pings DESC;
 
@@ -209,15 +216,17 @@ ORDER BY pings DESC;
 SELECT hour,
        sum(pings) AS pings,
        count(*)   AS active_cells
-FROM 'data/processed/la_long_beach/cells_by_hour.parquet'
+FROM read_parquet('data/processed/region=*/window=*/cells_by_hour.parquet',
+                  hive_partitioning = true)
 GROUP BY hour
 ORDER BY hour;
 
--- ── All regions at once (region parsed from the path) ─────────────────────
--- Glob across every region's cells.parquet; region is a bare folder, so
--- recover it from the file path with filename = true.
-SELECT regexp_extract(filename, 'processed/([^/]+)/', 1) AS region,
-       count(*)     AS cells,
-       sum(vessels) AS vessel_cell_pairs
-FROM read_parquet('data/processed/*/cells.parquet', filename = true)
-GROUP BY region;
+-- ── Top cells with centroid lat/lng (requires: INSTALL h3; LOAD h3;) ───────
+-- h3_cell_to_latlng returns [lat, lng]; index it (DuckDB arrays are 1-based).
+SELECT region, "window", cell_hex, vessels, pings, median_sog, avg_sog,
+       round(h3_cell_to_latlng(cell)[1], 5) AS lat,
+       round(h3_cell_to_latlng(cell)[2], 5) AS lng
+FROM read_parquet('data/processed/region=*/window=*/cells.parquet',
+                  hive_partitioning = true)
+ORDER BY vessels DESC
+LIMIT 20;
