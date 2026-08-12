@@ -63,7 +63,7 @@ FROM read_csv_auto('data/raw/ais-2024-07-01.csv.zst');
 -- ── Peek at the cleaned partitions ────────────────────────────────────────
 -- All cleaned rows across every ingested day/region (bbox + validity applied).
 SELECT *
-FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true)
+FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_partitioning = true)
 ;
 
 -- ── Class A vs B vessels per day (the holiday-traffic question) ────────────
@@ -79,7 +79,7 @@ FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true
 SELECT date,
        count(DISTINCT mmsi) FILTER (WHERE transceiver = 'B') AS class_b,
        count(DISTINCT mmsi) FILTER (WHERE transceiver = 'A') AS class_a
-FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true)
+FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_partitioning = true)
 GROUP BY date
 ORDER BY date;
 
@@ -88,7 +88,7 @@ SELECT date,
        count(DISTINCT mmsi) FILTER (WHERE transceiver = 'B') AS class_b,
        count(DISTINCT mmsi) FILTER (WHERE transceiver = 'A') AS class_a,
        count(DISTINCT vessel_type) AS vessel_type_cnt
-FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true)
+FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_partitioning = true)
 GROUP BY date
 ORDER BY date;
 
@@ -110,7 +110,7 @@ SELECT date,vessel_type,
        count(DISTINCT mmsi) FILTER (WHERE transceiver = 'B') AS class_b,
        count(DISTINCT mmsi) FILTER (WHERE transceiver = 'A') AS class_a,
        count(DISTINCT mmsi) AS cnt
-FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true)
+FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_partitioning = true)
 GROUP BY date, vessel_type
 ORDER BY date, cnt desc;
 
@@ -120,7 +120,7 @@ ORDER BY date, cnt desc;
 SELECT vt.label AS vessel_type,
        count(DISTINCT p.mmsi) AS vessels,
        count(*)               AS pings
-FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true) AS p
+FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_partitioning = true) AS p
 LEFT JOIN read_csv_auto('data/static/vessel_type_codes.csv') AS vt
        ON p.vessel_type = vt.code
 GROUP BY vt.label
@@ -146,7 +146,7 @@ WITH labelled AS (
                     WHEN p.vessel_type BETWEEN 90 AND 99 THEN 'Other'
                     ELSE 'Unknown (code ' || p.vessel_type || ')'
                   END) AS category
-  FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true) AS p
+  FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_partitioning = true) AS p
   LEFT JOIN read_csv_auto('data/static/vessel_type_codes.csv') AS vt
          ON p.vessel_type = vt.code
 )
@@ -227,4 +227,17 @@ SELECT region, "window", cell_hex, vessels, pings, median_sog, avg_sog,
 FROM read_parquet('data/processed/region=*/window=*/cells.parquet',
                   hive_partitioning = true)
 ORDER BY vessels DESC
+LIMIT 20;
+
+DESCRIBE SELECT *
+FROM read_parquet('data/processed/region=*/window=*/cells_by_type.parquet',
+                  hive_partitioning = true);
+
+SELECT region, "window", cell_hex, category, vessels, pings, median_sog, avg_sog,
+       round(h3_cell_to_latlng(cell)[1], 5) AS lat,
+       round(h3_cell_to_latlng(cell)[2], 5) AS lng
+FROM read_parquet('data/processed/region=*/window=*/cells_by_type.parquet',
+                  hive_partitioning = true)
+WHERE category IN ('cargo', 'tanker')
+ORDER BY category, vessels DESC
 LIMIT 20;
