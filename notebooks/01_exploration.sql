@@ -157,19 +157,17 @@ FROM labelled
 GROUP BY category
 ORDER BY pings DESC;
 
--- ── Region rollup (region parsed from the path) ───────────────────────────
--- region isn't a Hive column (folder is a bare `la_long_beach/`, not
--- `region=...`), so recover it from the file path with filename = true.
+-- ── Region rollup (region + date as Hive columns) ─────────────────────────
+-- interim is partitioned region=<region>/date=<date>, so both are Hive columns.
 -- hive_types casts the date partition to a real DATE for chronological sorting.
 -- Result: la_long_beach, 7 days, 2,033,802 cleaned rows total.
 SELECT
-  regexp_extract(filename, 'interim/([^/]+)/', 1) AS region,
+  region,
   date,
   count(*) AS rows_clean
-FROM read_parquet('data/interim/*/date=*/part.parquet',
+FROM read_parquet('data/interim/region=*/date=*/part.parquet',
                   hive_partitioning = true,
-                  hive_types = {'date': DATE},
-                  filename = true)
+                  hive_types = {'date': DATE})
 GROUP BY region, date
 ORDER BY date;
 

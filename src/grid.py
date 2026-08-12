@@ -42,7 +42,7 @@ def _window_paths(interim_dir: Path, region: str, window: Window) -> list[str]:
     paths: list[str] = []
     day = window.start
     while day <= window.end:
-        part = interim_dir / region / f"date={day:%Y-%m-%d}" / "part.parquet"
+        part = interim_dir / f"region={region}" / f"date={day:%Y-%m-%d}" / "part.parquet"
         if part.exists():
             paths.append(str(part))
         day += timedelta(days=1)

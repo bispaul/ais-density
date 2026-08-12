@@ -77,7 +77,7 @@ Per day, a single DuckDB `COPY (SELECT ... WHERE ...) TO parquet`:
 Output partitions:
 
 ```
-data/interim/<region>/date=YYYY-MM-DD/part.parquet
+data/interim/region=<region>/date=YYYY-MM-DD/part.parquet
 ```
 
 Each day's funnel (rows raw → after bbox → after cleaning) is appended to
@@ -87,10 +87,10 @@ Each day's funnel (rows raw → after bbox → after cleaning) is appended to
 
 ```sql
 -- one partition
-SELECT * FROM 'data/interim/la_long_beach/date=2024-07-01/part.parquet';
+SELECT * FROM 'data/interim/region=la_long_beach/date=2024-07-01/part.parquet';
 
 -- all days/regions with the date partition as a column
-SELECT * FROM read_parquet('data/interim/*/date=*/part.parquet', hive_partitioning = true);
+SELECT * FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_partitioning = true);
 ```
 
 ## Development

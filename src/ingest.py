@@ -38,7 +38,7 @@ def _raw_path(raw_dir: Path, day: date) -> Path:
 
 
 def _partition(interim_dir: Path, region: str, day: date) -> Path:
-    return interim_dir / region / f"date={day:%Y-%m-%d}" / "part.parquet"
+    return interim_dir / f"region={region}" / f"date={day:%Y-%m-%d}" / "part.parquet"
 
 
 def _days(start: date, end: date) -> Iterator[date]:
