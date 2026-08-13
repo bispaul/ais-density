@@ -10,6 +10,11 @@ windows:
 h3:
   resolution: 8
 
+classify:
+  activity_quantile: 0.90 # gate on the P90 of the input's vessel-count distribution
+  anchor_sog_max: 1.0 # median sog below this -> anchored/moored
+  lane_sog_min: 6.0 # median sog at/above this -> shipping lane
+
 regions:
   la_long_beach:
     bbox: [-118.80, 33.30, -117.80, 34.00]

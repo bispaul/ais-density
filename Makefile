@@ -1,6 +1,6 @@
-.PHONY: lint download ingest grid all
+.PHONY: lint download ingest grid classify all
 
-all: download ingest grid
+all: download ingest grid classify
 
 lint:
 	uv run ruff check .
@@ -14,3 +14,6 @@ ingest:
 
 grid:
 	uv run python -m src.grid $(ARGS)
+
+classify:
+	uv run python -m src.classify $(ARGS)

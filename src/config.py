@@ -29,6 +29,16 @@ class H3Config(BaseModel):
     resolution: H3Resolution
 
 
+class ClassifyConfig(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    # Quantile *level*; the vessel-count gate is computed at runtime from the
+    # input's own distribution.
+    activity_quantile: Annotated[float, Field(gt=0.0, lt=1.0)]
+    anchor_sog_max: float
+    lane_sog_min: float
+
+
 class Region(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -51,6 +61,7 @@ class Config(BaseModel):
     windows: dict[str, Window]
     h3: H3Config
     regions: dict[str, Region]
+    classify: ClassifyConfig
 
     def resolution_for(self, region: str) -> int:
         """H3 resolution for a region, honoring a per-region override."""

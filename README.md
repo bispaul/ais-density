@@ -48,7 +48,9 @@ Any number of windows and regions can be added; each is validated on load
 ```bash
 make download        # fetch raw files for all configured windows
 make ingest          # filter + clean each day to parquet partitions
-make all             # download, then ingest
+make grid            # aggregate cleaned pings onto an H3 grid, per window
+make classify        # rule-based activity classes on the grid cells
+make all             # download, ingest, grid, classify
 ```
 
 Pass flags through `ARGS`:
@@ -83,6 +85,27 @@ data/interim/region=<region>/date=YYYY-MM-DD/part.parquet
 Each day's funnel (rows raw → after bbox → after cleaning) is appended to
 `data/run_ledger.csv`.
 
+### grid (`src/grid.py`)
+
+Per region-window, one DuckDB pass over the interim partitions aggregates pings
+onto an H3 grid (resolution from config). Writes three parquets under
+`data/processed/region=<region>/window=<window>/`: `cells.parquet` (per cell),
+`cells_by_type.parquet` (cell × vessel category), `cells_by_hour.parquet`
+(cell × hour-of-day). Headline metric is `COUNT(DISTINCT mmsi)` (unique vessels);
+ping count is kept as a secondary column. Idempotent unless `--force`.
+
+### classify (`src/classify.py`)
+
+Rule-based activity classes on the grid cells. Quantile *levels* come from config
+(`classify.activity_quantile`); the vessel-count gate is computed at runtime from
+the input's own distribution. Cells at or above the gate are labelled by
+`median_sog`: `anchored/moored` (< `anchor_sog_max`), `shipping lane`
+(≥ `lane_sog_min`), else `maneuvering/harbor`; cells below the gate are
+`unclassified`. Run over two strata — all traffic (`cells.parquet`) and
+commercial-only (cargo+tanker from `cells_by_type`, each with its own quantiles).
+Writes `cells_classified.parquet` with a `stratum` column and logs per-class cell
+counts to `data/class_ledger.csv`.
+
 ## Querying the output
 
 ```sql
@@ -99,3 +122,13 @@ SELECT * FROM read_parquet('data/interim/region=*/date=*/part.parquet', hive_par
 make lint            # ruff check + mypy (strict, scoped to src/)
 uv run pytest        # tests
 ```
+
+## Limitations
+
+- **Berth vs anchorage not split (v1).** Both are labelled `anchored/moored`;
+  distinguishing a berth from an anchorage is out of scope.
+- **Commercial-stratum speed is approximate.** The commercial `median_sog` is a
+  ping-weighted blend of the cargo and tanker per-category medians, since the
+  exact combined median isn't recoverable from the aggregated grid.
+- **`vessel_type` is self-reported.** AIS ship-type codes are operator-declared
+  and may be wrong or missing (`~1%` are null/0).

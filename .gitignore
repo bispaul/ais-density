@@ -3,6 +3,7 @@ data/raw/
 data/interim/
 data/processed/
 data/run_ledger.csv
+data/class_ledger.csv
 
 # Python
 __pycache__/
