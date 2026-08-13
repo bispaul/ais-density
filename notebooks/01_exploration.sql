@@ -233,6 +233,29 @@ DESCRIBE SELECT *
 FROM read_parquet('data/processed/region=*/window=*/cells_by_type.parquet',
                   hive_partitioning = true);
 
+-- ── Top 20 cargo/tanker cells (per category) ──────────────────────────────
+-- One row per (cell, category); a cell can appear once for Cargo and once for
+-- Tanker. Ranked by unique vessels (honest density).
+SELECT region, "window", category, cell_hex, vessels, pings,
+       round(median_sog, 1) AS med_sog,
+       round(avg_sog, 1)    AS avg_sog
+FROM read_parquet('data/processed/region=*/window=*/cells_by_type.parquet',
+                  hive_partitioning = true)
+WHERE lower(category) IN ('cargo', 'tanker')
+ORDER BY vessels DESC
+LIMIT 20;
+
+-- ── Top 20 cells by combined cargo+tanker vessels (one row per cell) ───────
+SELECT cell_hex,
+       sum(vessels) AS cargo_tanker_vessels,
+       sum(pings)   AS pings
+FROM read_parquet('data/processed/region=*/window=*/cells_by_type.parquet',
+                  hive_partitioning = true)
+WHERE lower(category) IN ('cargo', 'tanker')
+GROUP BY cell_hex
+ORDER BY cargo_tanker_vessels DESC
+LIMIT 20;
+
 SELECT region, "window", cell_hex, category, vessels, pings, median_sog, avg_sog,
        round(h3_cell_to_latlng(cell)[1], 5) AS lat,
        round(h3_cell_to_latlng(cell)[2], 5) AS lng
