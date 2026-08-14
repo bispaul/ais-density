@@ -11,7 +11,8 @@ h3:
   resolution: 8
 
 classify:
-  activity_quantile: 0.90 # gate on the P90 of the input's vessel-count distribution
+  activity_quantile: 0.90      # gates lane + maneuvering (vessels-based)
+  anchor_ping_quantile: 0.90   # gates anchored/moored (pings-based)
   anchor_sog_max: 1.0 # median sog below this -> anchored/moored
   lane_sog_min: 6.0 # median sog at/above this -> shipping lane
 

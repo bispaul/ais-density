@@ -35,6 +35,7 @@ class ClassifyConfig(BaseModel):
     # Quantile *level*; the vessel-count gate is computed at runtime from the
     # input's own distribution.
     activity_quantile: Annotated[float, Field(gt=0.0, lt=1.0)]
+    anchor_ping_quantile: Annotated[float, Field(gt=0.0, lt=1.0)]
     anchor_sog_max: float
     lane_sog_min: float
 

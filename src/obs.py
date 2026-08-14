@@ -8,7 +8,16 @@ LEDGER_PATH = Path("data/run_ledger.csv")
 CLASS_LEDGER_PATH = Path("data/class_ledger.csv")
 
 _FIELDS = ["ran_at", "region", "date", "rows_raw", "rows_bbox", "rows_clean", "output"]
-_CLASS_FIELDS = ["ran_at", "region", "window", "stratum", "label", "cells"]
+_CLASS_FIELDS = [
+    "ran_at",
+    "region",
+    "window",
+    "stratum",
+    "label",
+    "cells",
+    "vessels_gate",
+    "pings_gate",
+]
 
 
 class RunRecord(BaseModel):
@@ -30,6 +39,8 @@ class ClassRecord(BaseModel):
     stratum: str
     label: str
     cells: int
+    vessels_gate: float
+    pings_gate: float
 
 
 def record_run(record: RunRecord, ledger: Path = LEDGER_PATH) -> None:
@@ -73,5 +84,7 @@ def record_classes(
                     "stratum": record.stratum,
                     "label": record.label,
                     "cells": record.cells,
+                    "vessels_gate": record.vessels_gate,
+                    "pings_gate": record.pings_gate,
                 }
             )
