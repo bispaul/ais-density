@@ -264,3 +264,70 @@ FROM read_parquet('data/processed/region=*/window=*/cells_by_type.parquet',
 WHERE category IN ('cargo', 'tanker')
 ORDER BY category, vessels DESC
 LIMIT 20;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- Referee B: behavioral cross-check of the classifier against AIS `status`.
+-- status 1 = at anchor, 5 = moored (both stationary). Per commercial cell we
+-- compute anchor_share = share of pings reporting status IN (1,5), straight
+-- from the interim pings, then join it to the classifier's commercial labels.
+-- FINDING: labels agree with behaviour — mean anchor_share is
+-- anchored/moored 0.85, maneuvering/harbor 0.25, shipping lane 0.01,
+-- unclassified 0.05. Kinematics (speed) and the ships' own status declarations
+-- point the same way. (N is small: only 3 anchored cells — directional, not
+-- large-sample.)
+-- ══════════════════════════════════════════════════════════════════════════
+
+-- Per classified commercial cell, with its behavioral anchor_share attached.
+WITH base AS (
+  SELECT h3_latlng_to_cell(latitude, longitude, 8) AS cell,
+         count(*) AS pings,
+         sum(CASE WHEN status IN (1, 5) THEN 1 ELSE 0 END) AS at_rest_pings
+  FROM read_parquet('data/interim/region=*/date=*/part.parquet',
+                    hive_partitioning = true)
+  WHERE vessel_type BETWEEN 70 AND 89          -- cargo + tanker (commercial)
+  GROUP BY cell
+),
+from_raw AS (
+  SELECT cell, at_rest_pings * 1.0 / pings AS anchor_share
+  FROM base
+),
+classified AS (
+  SELECT *
+  FROM read_parquet('data/processed/region=*/window=*/cells_classified.parquet',
+                    hive_partitioning = true)
+  WHERE stratum = 'commercial'
+)
+SELECT c.cell_hex, c.label, c.vessels, c.median_sog, r.anchor_share
+FROM classified c
+LEFT JOIN from_raw r ON r.cell = c.cell
+ORDER BY c.label, r.anchor_share DESC;
+
+-- Verdict: mean/median anchor_share per label (a good classifier is monotonic —
+-- high for anchored/moored, ~0 for shipping lane).
+WITH base AS (
+  SELECT h3_latlng_to_cell(latitude, longitude, 8) AS cell,
+         count(*) AS pings,
+         sum(CASE WHEN status IN (1, 5) THEN 1 ELSE 0 END) AS at_rest_pings
+  FROM read_parquet('data/interim/region=*/date=*/part.parquet',
+                    hive_partitioning = true)
+  WHERE vessel_type BETWEEN 70 AND 89
+  GROUP BY cell
+),
+from_raw AS (
+  SELECT cell, at_rest_pings * 1.0 / pings AS anchor_share
+  FROM base
+),
+classified AS (
+  SELECT *
+  FROM read_parquet('data/processed/region=*/window=*/cells_classified.parquet',
+                    hive_partitioning = true)
+  WHERE stratum = 'commercial'
+)
+SELECT c.label,
+       count(*)                        AS cells,
+       round(avg(r.anchor_share), 3)   AS mean_anchor_share,
+       round(median(r.anchor_share), 3) AS median_anchor_share
+FROM classified c
+LEFT JOIN from_raw r ON r.cell = c.cell
+GROUP BY c.label
+ORDER BY mean_anchor_share DESC;
