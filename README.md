@@ -198,7 +198,16 @@ independent corroboration alongside the `status` (Referee B) and ENC anchorage
   exact combined median isn't recoverable from the aggregated grid.
 - **`vessel_type` is self-reported.** AIS ship-type codes are operator-declared
   and may be wrong or missing (`~1%` are null/0).
-- **ENC harbor polygons don't tile private terminal basins.** In the Referee A
-  spatial check, moored ships at LA/Long Beach terminal berths fall outside the
-  charted anchorage/dredged/wharf polygons, so the "inside charted" share
-  (~34%) undercounts berths — a data-coverage gap, not a classifier error.
+- **Anchored/moored cells outside charted anchorages are explained, not errors.**
+  Only ~34% of commercial `anchored/moored` cells fall inside charted ENC
+  anchorages (Referee A). Decomposing the residual by H3 res-6 parent
+  (cell-count × ping-intensity) resolves it into four traceable signatures, none a
+  classifier error: (a) inner-harbor **terminal berths** the ENC harbor polygons
+  don't tile (private basins); (b) the **El Segundo offshore mooring terminal**
+  (~33.90/-118.48) — tanker moorings, invisible to anchorage polygons because a
+  mooring isn't an ACHARE; (c) **high-persistence holding adjacent to Anchorage F**
+  near the offshore platform belt (~33.60/-118.05); and (d) a diffuse
+  **low-persistence drift smear** across the outer basin toward Catalina
+  (many cells at ~120 pings) — the many-cells/low-ping signature of vessels
+  loitering under bare steerageway, consistent with post-2021 just-in-time
+  queuing rather than anchoring in charted boxes.

@@ -387,3 +387,41 @@ SELECT count(*)                                                    AS anchored,
        count(*) FILTER (WHERE NOT in_anch AND in_harbor)           AS berth_harbor,
        count(*) FILTER (WHERE NOT in_anch AND NOT in_harbor)       AS neither
 FROM tagged;
+
+-- ── Referee A residual: decompose the "neither" cells by H3 res-6 parent ─────
+-- Elegant clustering with zero geometry: group the outside-charted anchored
+-- cells by their ~36 km² res-6 parent. 65 cells span 21 parents (largest 10) —
+-- dispersed, not one block. Reading cell-count × ping-intensity gives 4 signatures:
+--   few cells / high pings  = true stationary features:
+--     * inner-harbor berths      33.73/-118.21  avg ~3.1k  (ENC harbor polys miss them)
+--     * El Segundo tanker moorings 33.90/-118.48 avg ~1.3k  (a mooring isn't an ACHARE)
+--     * holding near Anchorage F / platform belt 33.60/-118.05 avg ~1.5k
+--   many cells / low pings  = drift smear across the outer basin toward Catalina
+--     * 10 cells @ ~120 pings — loitering under bare steerageway (post-2021 JIT queuing)
+WITH anchorage AS (
+  SELECT geom FROM ST_Read('data/static/anchorages_la_long_beach.geojson')
+  UNION ALL SELECT geom FROM ST_Read('data/static/anchorages_approach.geojson')
+),
+harbor AS (
+  SELECT ST_Buffer(geom, 0.008) AS geom FROM ST_Read('data/static/harbor_wharves_la_long_beach.geojson')
+  UNION ALL SELECT ST_Buffer(geom, 0.008) AS geom FROM ST_Read('data/static/harbor_dredged_la_long_beach.geojson')
+),
+cells AS (
+  SELECT cell, pings, ST_GeomFromText(h3_cell_to_boundary_wkt(cell)) AS hex
+  FROM read_parquet('data/processed/region=*/window=*/cells_classified.parquet', hive_partitioning = true)
+  WHERE stratum = 'commercial' AND label = 'anchored/moored'
+),
+neither AS (
+  SELECT h3_cell_to_parent(cell, 6) AS parent, pings
+  FROM cells c
+  WHERE NOT EXISTS (SELECT 1 FROM anchorage a WHERE ST_Intersects(c.hex, a.geom))
+    AND NOT EXISTS (SELECT 1 FROM harbor   h WHERE ST_Intersects(c.hex, h.geom))
+)
+SELECT h3_h3_to_string(parent) AS parent,
+       count(*)          AS cells,
+       round(avg(pings)) AS avg_pings,
+       round(h3_cell_to_latlng(parent)[1], 3) AS lat,
+       round(h3_cell_to_latlng(parent)[2], 3) AS lng
+FROM neither
+GROUP BY parent
+ORDER BY cells DESC;
