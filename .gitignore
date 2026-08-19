@@ -5,6 +5,9 @@ data/processed/
 data/run_ledger.csv
 data/class_ledger.csv
 
+# Large geospatial rasters (vendored clipped versions only, if any)
+data/static/*.tif
+
 # Python
 __pycache__/
 *.py[cod]

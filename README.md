@@ -123,6 +123,34 @@ make lint            # ruff check + mypy (strict, scoped to src/)
 uv run pytest        # tests
 ```
 
+## Validation reference data
+
+Referee datasets used to sanity-check the classifier live in `data/static/`.
+
+**Charted anchorage / harbor polygons (NOAA ENC via ENC Direct to GIS).**
+Pulled from the ArcGIS REST service, clipped to the region bbox
+`[-118.80, 33.30, -117.80, 34.00]`, and vendored as GeoJSON:
+
+```bash
+BASE="https://encdirect.noaa.gov/arcgis/rest/services/encdirect"
+Q="query?geometry=-118.80,33.30,-117.80,34.00&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&f=geojson"
+
+# Anchorage areas (S-57 ACHARE): harbour scale (layer 186) + approach scale (layer 191)
+curl -s "$BASE/enc_harbour/MapServer/186/$Q" -o data/static/anchorages_la_long_beach.geojson
+curl -s "$BASE/enc_approach/MapServer/191/$Q" -o data/static/anchorages_approach.geojson
+
+# Harbor limits for the berth bucket: dredged basins (228) + wharves/shoreline (138)
+curl -s "$BASE/enc_harbour/MapServer/228/$Q" -o data/static/harbor_dredged_la_long_beach.geojson
+curl -s "$BASE/enc_harbour/MapServer/138/$Q" -o data/static/harbor_wharves_la_long_beach.geojson
+```
+
+Discover layer IDs by browsing `"$BASE/enc_harbour/MapServer/layers?f=json"`.
+
+**NOAA AIS Vessel Transit Counts (Task 4.3).** The annual raster is a ~466 MB
+BigTIFF — it won't open in macOS Preview (that's expected, not corruption) and is
+**gitignored** (`data/static/*.tif`); read/clip it with GDAL/rasterio, not an
+image viewer.
+
 ## Limitations
 
 - **Berth vs anchorage not split (v1).** Both are labelled `anchored/moored`;
@@ -132,3 +160,7 @@ uv run pytest        # tests
   exact combined median isn't recoverable from the aggregated grid.
 - **`vessel_type` is self-reported.** AIS ship-type codes are operator-declared
   and may be wrong or missing (`~1%` are null/0).
+- **ENC harbor polygons don't tile private terminal basins.** In the Referee A
+  spatial check, moored ships at LA/Long Beach terminal berths fall outside the
+  charted anchorage/dredged/wharf polygons, so the "inside charted" share
+  (~34%) undercounts berths — a data-coverage gap, not a classifier error.

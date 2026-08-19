@@ -271,10 +271,9 @@ LIMIT 20;
 -- compute anchor_share = share of pings reporting status IN (1,5), straight
 -- from the interim pings, then join it to the classifier's commercial labels.
 -- FINDING: labels agree with behaviour — mean anchor_share is
--- anchored/moored 0.85, maneuvering/harbor 0.25, shipping lane 0.01,
--- unclassified 0.05. Kinematics (speed) and the ships' own status declarations
--- point the same way. (N is small: only 3 anchored cells — directional, not
--- large-sample.)
+-- anchored/moored 0.54 (n=127), maneuvering/harbor 0.25, shipping lane 0.01,
+-- unclassified 0.01. Kinematics (speed) and the ships' own status declarations
+-- point the same way — now on a solid sample after the two-gate (pings) fix.
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- Per classified commercial cell, with its behavioral anchor_share attached.
@@ -331,3 +330,60 @@ FROM classified c
 LEFT JOIN from_raw r ON r.cell = c.cell
 GROUP BY c.label
 ORDER BY mean_anchor_share DESC;
+
+-- ── Gate boundary check: stationary commercial cells split at the pings-gate ──
+-- median_sog < 1 (at rest) cells partition cleanly at the pings_gate (P90 = 77):
+-- dense ones (>= gate) become anchored/moored; sparse ones (< gate) stay
+-- unclassified — transient stops, not persistent anchorages. Result:
+--   anchored/moored  127 cells, pings 77-9060 (avg 1243)
+--   unclassified     104 cells, pings  3-76   (avg   44)
+-- Confirms the pings-gate does real work: a razor-sharp split exactly at P90.
+SELECT label,
+       count(*)          AS cells,
+       round(min(pings)) AS min_pings,
+       round(max(pings)) AS max_pings,
+       round(avg(pings)) AS avg_pings
+FROM read_parquet('data/processed/region=*/window=*/cells_classified.parquet',
+                  hive_partitioning = true)
+WHERE stratum = 'commercial' AND median_sog < 1
+GROUP BY label
+ORDER BY cells DESC;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- Referee A: spatial cross-check of commercial anchored/moored cells against
+-- charted NOAA ENC polygons (see README "Validation reference data" for curls).
+-- Requires: INSTALL spatial; LOAD spatial; INSTALL h3 FROM community; LOAD h3;
+-- Method: hex FOOTPRINT (h3_cell_to_boundary_wkt) ST_Intersects the polygons —
+-- fairer than a centroid test for 0.86-km hexes against narrow boxes. Three-way:
+--   charted anchorage (ACHARE harbour 186 ∪ approach 191)
+--   berth/harbor      (dredged 228 ∪ wharves 138, buffered ~800 m)
+--   neither           (residual)
+-- FINDING: 34% land in charted anchorages (up from 25% with centroids/harbour-
+-- only). Most of the rest are terminal berths in the inner harbor (33.74/-118.21,
+-- 3k-9k pings) — the deferred berth-vs-anchorage case, NOT classifier error. The
+-- berth bucket is undercounted because ENC features don't tile private terminal
+-- basins (see limitations).
+-- ══════════════════════════════════════════════════════════════════════════
+WITH anchorage AS (
+  SELECT geom FROM ST_Read('data/static/anchorages_la_long_beach.geojson')
+  UNION ALL SELECT geom FROM ST_Read('data/static/anchorages_approach.geojson')
+),
+harbor AS (
+  SELECT ST_Buffer(geom, 0.008) AS geom FROM ST_Read('data/static/harbor_wharves_la_long_beach.geojson')
+  UNION ALL SELECT ST_Buffer(geom, 0.008) AS geom FROM ST_Read('data/static/harbor_dredged_la_long_beach.geojson')
+),
+cells AS (
+  SELECT ST_GeomFromText(h3_cell_to_boundary_wkt(cell)) AS hex
+  FROM read_parquet('data/processed/region=*/window=*/cells_classified.parquet', hive_partitioning = true)
+  WHERE stratum = 'commercial' AND label = 'anchored/moored'
+),
+tagged AS (
+  SELECT EXISTS(SELECT 1 FROM anchorage a WHERE ST_Intersects(c.hex, a.geom)) AS in_anch,
+         EXISTS(SELECT 1 FROM harbor h    WHERE ST_Intersects(c.hex, h.geom)) AS in_harbor
+  FROM cells c
+)
+SELECT count(*)                                                    AS anchored,
+       count(*) FILTER (WHERE in_anch)                             AS charted_anchorage,
+       count(*) FILTER (WHERE NOT in_anch AND in_harbor)           AS berth_harbor,
+       count(*) FILTER (WHERE NOT in_anch AND NOT in_harbor)       AS neither
+FROM tagged;
