@@ -4,6 +4,7 @@ data/interim/
 data/processed/
 data/run_ledger.csv
 data/class_ledger.csv
+maps/
 
 # Large geospatial rasters (vendored clipped versions only, if any)
 data/static/*.tif

@@ -1,6 +1,6 @@
-.PHONY: lint download ingest grid classify all
+.PHONY: lint download ingest grid classify visualize all
 
-all: download ingest grid classify
+all: download ingest grid classify visualize
 
 lint:
 	uv run ruff check .
@@ -17,3 +17,6 @@ grid:
 
 classify:
 	uv run python -m src.classify $(ARGS)
+
+visualize:
+	uv run python -m src.visualize $(ARGS)
