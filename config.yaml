@@ -3,6 +3,9 @@ windows:
   jul_2024:
     start: 2024-07-01
     end: 2024-07-31
+  jan_2024:
+    start: 2024-01-01
+    end: 2024-01-31
   # jul_2025:                # uncomment at stretch-goal time
   #   start: 2025-07-01
   #   end:   2025-07-31

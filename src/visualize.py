@@ -708,6 +708,7 @@ def visualize_all(
 ) -> dict[str, dict[str, dict[str, Path]]]:
     con = _connect()
     outputs: dict[str, dict[str, dict[str, Path]]] = {}
+    window_names = list(config.windows)
     for region, region_cfg in config.regions.items():
         for window_name in config.windows:
             result = visualize_window(con, region, window_name, region_cfg, force=force)
@@ -715,7 +716,104 @@ def visualize_all(
                 outputs.setdefault(region, {})[window_name] = result
                 validation_panel(con, region, window_name, region_cfg)
                 hero_map(con, region, window_name, region_cfg)
+        if len(window_names) >= 2:
+            temporal_diff(con, region, window_names[0], window_names[1], region_cfg)
     return outputs
+
+
+def temporal_diff(
+    con: DuckDBPyConnection,
+    region: str,
+    window_a: str,
+    window_b: str,
+    region_cfg: Region,
+    *,
+    processed_dir: Path = PROCESSED_DIR,
+    out_dir: Path = DOCS_IMG,
+) -> Path | None:
+    """Diverging map of per-cell unique-vessel density, window_a minus window_b."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import TwoSlopeNorm
+    from matplotlib.patches import Polygon
+
+    pa = processed_dir / f"region={region}" / f"window={window_a}" / "cells.parquet"
+    pb = processed_dir / f"region={region}" / f"window={window_b}" / "cells.parquet"
+    if not (pa.exists() and pb.exists()):
+        logger.info("skip diff {} — need both {} and {}", region, window_a, window_b)
+        return None
+
+    rows = con.execute(
+        "SELECT h3_cell_to_boundary_wkt(cell) AS wkt, "
+        "coalesce(a.vessels, 0) AS va, coalesce(b.vessels, 0) AS vb "
+        f"FROM read_parquet('{pa}') a FULL OUTER JOIN read_parquet('{pb}') b USING (cell)"
+    ).fetchall()
+    if not rows:
+        return None
+
+    diffs = np.array([va - vb for _, va, vb in rows], dtype=float)
+    vmax = float(np.percentile(np.abs(diffs), 98)) or 1.0
+    norm = TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
+    cmap = plt.get_cmap("RdBu_r")
+
+    min_lon, min_lat, max_lon, max_lat = region_cfg.bbox
+    aspect = 1.0 / math.cos(math.radians((min_lat + max_lat) / 2))
+    fig, ax = plt.subplots(
+        figsize=(13, 8), facecolor="#0d0f16", constrained_layout=True
+    )
+    ax.set_facecolor("#0d0f16")
+    ax.set_xlim(min_lon, max_lon)
+    ax.set_ylim(min_lat, max_lat)
+    ax.set_aspect(aspect)
+    for spine in ax.spines.values():
+        spine.set_color("#333844")
+    ax.tick_params(colors="#8a90a0", labelsize=7)
+    for ring in _land_rings(region):
+        ax.add_patch(
+            Polygon(
+                ring,
+                closed=True,
+                facecolor="#242832",
+                edgecolor="#3a4150",
+                linewidth=0.6,
+                zorder=0,
+            )
+        )
+    for (wkt, _va, _vb), d in zip(rows, diffs):
+        ax.add_patch(
+            Polygon(
+                _parse_wkt_polygon(wkt),
+                closed=True,
+                facecolor=cmap(norm(d)),
+                edgecolor="none",
+                alpha=0.9,
+                zorder=2,
+            )
+        )
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label(
+        f"unique vessels per cell: {window_a} − {window_b}", color="#e8eaf0", fontsize=8
+    )
+    cbar.ax.yaxis.set_tick_params(color="#8a90a0", labelsize=7)
+    plt.setp(cbar.ax.get_yticklabels(), color="#8a90a0")
+    label = _REGION_LABEL.get(region, region.replace("_", " ").title())
+    ax.set_title(
+        f"{label} seasonal difference — {window_a} vs {window_b} (per-cell unique vessels)",
+        color="#e8eaf0",
+        fontsize=12,
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"diff_{region}_{window_a}_vs_{window_b}.png"
+    fig.savefig(out, dpi=150, facecolor="#0d0f16")
+    plt.close(fig)
+    logger.info("wrote temporal diff -> {}", out)
+    return out
 
 
 def main() -> None:
@@ -742,6 +840,9 @@ def main() -> None:
         visualize_window(con, args.region, window_name, region_cfg, force=args.force)
         validation_panel(con, args.region, window_name, region_cfg)
         hero_map(con, args.region, window_name, region_cfg)
+    window_names = list(config.windows)
+    if len(window_names) >= 2:
+        temporal_diff(con, args.region, window_names[0], window_names[1], region_cfg)
 
 
 if __name__ == "__main__":

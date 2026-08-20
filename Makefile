@@ -36,4 +36,3 @@ help:
 	@echo "  make all              run the full pipeline (config-driven, all regions/windows)"
 	@echo "  make <stage> ARGS=--force   re-run one stage, forcing recompute"
 	@echo "  make clean            drop derived data (interim/processed/maps/ledgers), keep raw"
-

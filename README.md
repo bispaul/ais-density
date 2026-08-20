@@ -102,6 +102,27 @@ At res 9 (finer, for the narrow channel) the month yields 13,725 cells — 497 l
 the transit raster) are vendored for LA/Long Beach only, so Houston's validation
 panel is skipped gracefully rather than drawn against the wrong extent.
 
+## Seasonal comparison (January vs July 2024)
+
+Running the same pipeline over a second 31-day window (January 2024) and diffing
+per-cell unique-vessel density against July isolates the seasonal signal:
+
+![LA/Long Beach seasonal difference, July minus January](docs/img/diff_la_long_beach_jul_2024_vs_jan_2024.png)
+
+Red is July-heavy, blue January-heavy — and the map is red almost everywhere.
+July draws **2,547 distinct vessels** to the region against January's **1,761**
+(+45 %), and those vessels roam far more widely: total per-cell vessel visits are
+**2.3× higher** in July (276k vs 122k), filling the coastal water (the pale-red
+background) and lighting the lanes deepest red.
+
+The control is the payoff. The **commercial stratum barely moves** — ~300
+shipping-lane cells (297 July, 332 January) and ~95 anchored cells (98 vs 94) in
+both months; the small differences track the per-window adaptive gate, not
+seasonal commercial volume. The scheduled cargo/tanker fleet is season-invariant,
+so the pervasive all-traffic surge is genuinely recreational, not a data-coverage
+artifact. This is [Finding 1](#findings) in the time dimension: the naïve density
+swings 2.3× with the seasons while the stratified commercial view holds steady.
+
 ## Validation
 
 ![Classified commercial cells vs NOAA transit counts](docs/img/validation_panel_la_long_beach.png)
