@@ -209,6 +209,22 @@ curl -s "$BASE/enc_harbour/MapServer/138/$Q" -o data/static/harbor_wharves_la_lo
 
 Discover layer IDs by browsing `"$BASE/enc_harbour/MapServer/layers?f=json"`.
 
+**Coastline / landmask (Natural Earth 10 m).** For orientation on the validation
+figure, the Natural Earth `ne_10m_land` polygons are clipped to the region bbox
+with DuckDB spatial and vendored as `data/static/land_la_long_beach.geojson`:
+
+```bash
+curl -sSL "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson" -o /tmp/ne_10m_land.geojson
+duckdb <<'SQL'
+INSTALL spatial; LOAD spatial;
+COPY (
+  SELECT ST_Intersection(geom, ST_MakeEnvelope(-118.80, 33.30, -117.80, 34.00)) AS geom
+  FROM ST_Read('/tmp/ne_10m_land.geojson')
+  WHERE ST_Intersects(geom, ST_MakeEnvelope(-118.80, 33.30, -117.80, 34.00))
+) TO 'data/static/land_la_long_beach.geojson' WITH (FORMAT GDAL, DRIVER 'GeoJSON');
+SQL
+```
+
 **NOAA AIS Vessel Transit Counts (Task 4.3).** The annual raster is a ~466 MB
 BigTIFF — it won't open in macOS Preview (that's expected, not corruption) and is
 **gitignored** (`data/static/*.tif`); read/clip it with GDAL/rasterio, not an

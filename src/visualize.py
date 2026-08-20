@@ -39,6 +39,7 @@ _TOOLTIP_STYLE = {
 
 DOCS_IMG = Path("docs/img")
 TRANSIT_TIF = STATIC_DIR / "transit_2024_la_long_beach.tif"
+LAND_GEOJSON = STATIC_DIR / "land_la_long_beach.geojson"
 
 # The four "neither" residual feature groups from the Referee-A decomposition.
 _NEITHER_FEATURES: list[tuple[float, float, str]] = [
@@ -47,6 +48,9 @@ _NEITHER_FEATURES: list[tuple[float, float, str]] = [
     (-118.05, 33.60, "Anchorage-F / platform belt"),
     (-118.33, 33.47, "Outer-basin drift smear"),
 ]
+
+# The six maneuvering/harbor cells sit in the LA/LB main channels (Checkpoint 4).
+_MANEUVER_CALLOUT: tuple[float, float, str] = (-118.277, 33.743, "Turning basins")
 
 
 def _connect() -> DuckDBPyConnection:
@@ -380,6 +384,21 @@ def _achare_rings() -> list[list[tuple[float, float]]]:
     return rings
 
 
+def _land_rings(path: Path = LAND_GEOJSON) -> list[list[tuple[float, float]]]:
+    if not path.exists():
+        return []
+    rings: list[list[tuple[float, float]]] = []
+    for feat in json.loads(path.read_text()).get("features", []):
+        geom = feat.get("geometry") or {}
+        coords = geom.get("coordinates") or []
+        if geom.get("type") == "Polygon":
+            rings.append([(float(x), float(y)) for x, y in coords[0]])
+        elif geom.get("type") == "MultiPolygon":
+            for poly in coords:
+                rings.append([(float(x), float(y)) for x, y in poly[0]])
+    return rings
+
+
 def _load_transit_4326(tif: Path) -> tuple[Any, tuple[float, float, float, float]]:
     """Reproject the EPSG:3857 transit raster to lon/lat; return (array, extent)."""
     import numpy as np
@@ -452,7 +471,19 @@ def validation_panel(
             spine.set_color("#333844")
         ax.tick_params(colors="#8a90a0", labelsize=7)
 
-    # Panel (a): classified cells + ACHARE outlines + the four "neither" callouts.
+    # Panel (a): land + classified cells + ACHARE outlines + the residual callouts.
+    land = _land_rings()
+    for ring in land:
+        ax_a.add_patch(
+            Polygon(
+                ring,
+                closed=True,
+                facecolor="#242832",
+                edgecolor="#3a4150",
+                linewidth=0.6,
+                zorder=0,
+            )
+        )
     for label, wkt in rows:
         rgb = _LABEL_COLOR.get(label, [70, 74, 92])
         ax_a.add_patch(
@@ -462,6 +493,7 @@ def validation_panel(
                 facecolor=[c / 255 for c in rgb],
                 edgecolor="none",
                 alpha=0.8,
+                zorder=2,
             )
         )
     for ring in _achare_rings():
@@ -472,6 +504,7 @@ def validation_panel(
                 fill=False,
                 edgecolor=[c / 255 for c in _ACHARE_COLOR],
                 linewidth=0.9,
+                zorder=3,
             )
         )
     for lon, lat, text in _NEITHER_FEATURES:
@@ -485,6 +518,22 @@ def validation_panel(
             arrowprops={"arrowstyle": "->", "color": "#e8eaf0", "lw": 0.8},
             bbox={"boxstyle": "round,pad=0.2", "fc": "#11141c", "ec": "none", "alpha": 0.85},
         )
+    m_lon, m_lat, m_text = _MANEUVER_CALLOUT
+    ax_a.annotate(
+        m_text,
+        xy=(m_lon, m_lat),
+        xytext=(m_lon - 0.13, m_lat - 0.12),
+        color="#0d0f16",
+        fontsize=8,
+        ha="center",
+        arrowprops={"arrowstyle": "->", "color": _rgb01(_LABEL_COLOR["maneuvering/harbor"]), "lw": 0.8},
+        bbox={
+            "boxstyle": "round,pad=0.2",
+            "fc": _rgb01(_LABEL_COLOR["maneuvering/harbor"]),
+            "ec": "none",
+            "alpha": 0.9,
+        },
+    )
     handles = [
         Patch(facecolor=_rgb01(_LABEL_COLOR["shipping lane"]), label="Shipping lane"),
         Patch(
@@ -534,6 +583,11 @@ def validation_panel(
             transform=ax_b.transAxes,
             color="#8a90a0",
             ha="center",
+        )
+    # Coastline outline on (b) mirrors (a)'s landmask so the two panels register.
+    for ring in _land_rings():
+        ax_b.add_patch(
+            Polygon(ring, closed=True, fill=False, edgecolor="#6b7280", linewidth=0.6)
         )
     ax_b.set_title(
         "(b) NOAA 2024 AIS Transit Counts — log(1 + transits)",
