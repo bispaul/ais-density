@@ -50,7 +50,8 @@ make download        # fetch raw files for all configured windows
 make ingest          # filter + clean each day to parquet partitions
 make grid            # aggregate cleaned pings onto an H3 grid, per window
 make classify        # rule-based activity classes on the grid cells
-make all             # download, ingest, grid, classify
+make visualize       # render interactive HTML maps + the validation figure
+make all             # download, ingest, grid, classify, visualize
 ```
 
 Pass flags through `ARGS`:
@@ -105,6 +106,68 @@ the input's own distribution. Cells at or above the gate are labelled by
 commercial-only (cargo+tanker from `cells_by_type`, each with its own quantiles).
 Writes `cells_classified.parquet` with a `stratum` column and logs per-class cell
 counts to `data/class_ledger.csv`.
+
+### visualize (`src/visualize.py`)
+
+Renders the classified grid to standalone interactive HTML (pydeck, dark CARTO
+basemap) under `maps/region=<region>/window=<window>/` — one map per view, each
+with hover popups, an injected legend + title panel, and the charted-anchorage
+(ACHARE) overlay. The `h3` uint64 cell id is converted to a hex string with
+`h3_h3_to_string` here and nowhere else (it is never persisted upstream).
+
+- `classification.html` — the hero: commercial cells coloured by class
+  (shipping lane / anchored-moored / maneuvering-harbor, Okabe-Ito palette;
+  unclassified cells dropped so the classes read against the dark basemap).
+- `commercial_density.html` / `all_traffic_density.html` — unique-vessel density
+  (log colour) for the stratified vs naïve views.
+- `median_speed.html` — per-cell median speed over ground.
+
+It also writes the two-panel validation figure to
+`docs/img/validation_panel_<region>.png` (see [Maps & findings](#maps--findings)).
+The `maps/` HTML is gitignored — regenerate with `make visualize`; the committed
+PNG is the shareable artifact.
+
+## Maps & findings
+
+### Validation figure
+
+![Classified commercial cells vs NOAA transit counts](docs/img/validation_panel_la_long_beach.png)
+
+**(a)** Classified commercial cells (class colours) over charted ENC anchorages
+(ACHARE, green outlines), with the four residual "neither" groups annotated.
+**(b)** NOAA's 2024 AIS Vessel Transit Counts raster, georeferenced from its
+native EPSG:3857 to the same lon/lat extent and coloured by `log(1 + transits)`.
+The classifier's lanes in (a) trace the same corridors the independent transit
+raster lights up in (b): the twin traffic-separation-scheme parallels from the
+northwest, the southeast departure fan, and the harbour-entrance hotspot.
+
+### Findings
+
+1. **Naïve density is a marina map; stratifying recovers the commercial story.**
+   The all-traffic density view is dominated by recreational hotspots (Marina
+   del Rey, the small-craft basins); restricting to the cargo+tanker stratum with
+   its own gate isolates the actual shipping corridors and terminal approaches.
+2. **The classifier agrees with two independent references.** Lane cells sit at
+   ~10× the transit-raster background and above its p90 (Task 4.3), and the
+   `status`-field cross-check (Referee B) and ENC anchorage overlay (Referee A)
+   corroborate the anchored and lane labels.
+3. **The "neither" anchored cells decompose into four traceable signatures.**
+   Only ~34% of commercial `anchored/moored` cells fall inside charted ENC
+   anchorages; the residual resolves into inner-harbor terminal berths, the El
+   Segundo offshore mooring terminal, high-persistence holding adjacent to
+   Anchorage F / the platform belt, and a diffuse outer-basin drift smear toward
+   Catalina — none a classifier error (see [Limitations](#limitations)).
+4. **A July 4th holiday-weekend fleet uptick.** Distinct vessels rise from a
+   Mon–Wed baseline of 805–860 to 921 on July 4 and stay elevated through the
+   weekend (894–934 on July 5–7). The scheduled cargo/tanker fleet does not swing
+   day-to-day, so the increase is holiday recreational traffic.
+5. **The port runs around the clock, with a modest midday-local peak.** Hourly
+   pings peak at 18:00–20:00 UTC (~11:00–13:00 local PDT) and trough at
+   06:00–08:00 UTC (overnight local) — a 1.44× peak/trough ratio, i.e. a real but
+   shallow diurnal rhythm rather than a day/night on/off cycle.
+
+Lane *directionality* (inbound vs outbound separation) is not analysed: course
+over ground is not retained in the aggregated grid, so it is out of scope for v1.
 
 ## Querying the output
 

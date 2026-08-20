@@ -9,6 +9,7 @@ dependencies = [
     "duckdb>=1.5.5",
     "folium>=0.20.0",
     "loguru>=0.7.3",
+    "matplotlib>=3.11.1",
     "polars>=1.43.2",
     "pooch>=1.9.0",
     "pydantic>=2.13.4",
@@ -33,12 +34,15 @@ ignore_missing_imports = true
 module = "pydeck"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["matplotlib.*", "rasterio.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [dependency-groups]
 dev = [
-    "matplotlib>=3.11.1",
     "mypy>=2.3.0",
     "pytest>=9.1.1",
     "ruff>=0.16.2",

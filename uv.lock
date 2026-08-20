@@ -26,6 +26,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "folium" },
     { name = "loguru" },
+    { name = "matplotlib" },
     { name = "polars" },
     { name = "pooch" },
     { name = "pydantic" },
@@ -37,7 +38,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "matplotlib" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
@@ -50,6 +50,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5" },
     { name = "folium", specifier = ">=0.20.0" },
     { name = "loguru", specifier = ">=0.7.3" },
+    { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "pooch", specifier = ">=1.9.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
@@ -61,7 +62,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "mypy", specifier = ">=2.3.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.2" },
