@@ -603,6 +603,87 @@ def validation_panel(
     return out
 
 
+def hero_map(
+    con: DuckDBPyConnection,
+    region: str,
+    window_name: str,
+    region_cfg: Region,
+    *,
+    processed_dir: Path = PROCESSED_DIR,
+    out_dir: Path = DOCS_IMG,
+) -> Path | None:
+    """Landscape README hero: classified commercial cells over coastline + ACHARE."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch, Polygon
+
+    win = processed_dir / f"region={region}" / f"window={window_name}"
+    classified = win / "cells_classified.parquet"
+    if not classified.exists():
+        logger.warning("skip hero {}/{} — classified parquet missing", region, window_name)
+        return None
+
+    rows = con.execute(
+        "SELECT label, h3_cell_to_boundary_wkt(cell) AS wkt "
+        f"FROM read_parquet('{classified}') "
+        "WHERE stratum = 'commercial' AND label <> 'unclassified'"
+    ).fetchall()
+
+    min_lon, min_lat, max_lon, max_lat = region_cfg.bbox
+    aspect = 1.0 / math.cos(math.radians((min_lat + max_lat) / 2))
+
+    fig, ax = plt.subplots(figsize=(13, 8), facecolor="#0d0f16", constrained_layout=True)
+    ax.set_facecolor("#0d0f16")
+    ax.set_xlim(min_lon, max_lon)
+    ax.set_ylim(min_lat, max_lat)
+    ax.set_aspect(aspect)
+    for spine in ax.spines.values():
+        spine.set_color("#333844")
+    ax.tick_params(colors="#8a90a0", labelsize=7)
+
+    for ring in _land_rings():
+        ax.add_patch(
+            Polygon(ring, closed=True, facecolor="#242832", edgecolor="#3a4150",
+                    linewidth=0.6, zorder=0)
+        )
+    for label, wkt in rows:
+        rgb = _LABEL_COLOR.get(label, [70, 74, 92])
+        ax.add_patch(
+            Polygon(_parse_wkt_polygon(wkt), closed=True, facecolor=[c / 255 for c in rgb],
+                    edgecolor="none", alpha=0.85, zorder=2)
+        )
+    for ring in _achare_rings():
+        ax.add_patch(
+            Polygon(ring, closed=True, fill=False, edgecolor=[c / 255 for c in _ACHARE_COLOR],
+                    linewidth=0.9, zorder=3)
+        )
+    handles = [
+        Patch(facecolor=_rgb01(_LABEL_COLOR["shipping lane"]), label="Shipping lane"),
+        Patch(facecolor=_rgb01(_LABEL_COLOR["anchored/moored"]), label="Anchored / moored"),
+        Patch(facecolor=_rgb01(_LABEL_COLOR["maneuvering/harbor"]), label="Maneuvering / harbor"),
+        Patch(facecolor="none", edgecolor=_rgb01(_ACHARE_COLOR), label="Charted anchorage (ACHARE)"),
+    ]
+    leg = ax.legend(handles=handles, loc="lower left", fontsize=8.5, framealpha=0.85)
+    leg.get_frame().set_facecolor("#11141c")
+    leg.get_frame().set_edgecolor("none")
+    for txt in leg.get_texts():
+        txt.set_color("#e8eaf0")
+    ax.set_title(
+        "LA / Long Beach commercial vessel traffic — July 2024 (res-8 H3, two-gate classifier)",
+        color="#e8eaf0",
+        fontsize=12,
+    )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"hero_{region}.png"
+    fig.savefig(out, dpi=150, facecolor="#0d0f16")
+    plt.close(fig)
+    logger.info("wrote hero map -> {}", out)
+    return out
+
+
 def visualize_all(
     config: Config, *, force: bool = False
 ) -> dict[str, dict[str, dict[str, Path]]]:
@@ -614,6 +695,7 @@ def visualize_all(
             if result:
                 outputs.setdefault(region, {})[window_name] = result
                 validation_panel(con, region, window_name, region_cfg)
+                hero_map(con, region, window_name, region_cfg)
     return outputs
 
 
@@ -640,6 +722,7 @@ def main() -> None:
     for window_name in config.windows:
         visualize_window(con, args.region, window_name, region_cfg, force=args.force)
         validation_panel(con, args.region, window_name, region_cfg)
+        hero_map(con, args.region, window_name, region_cfg)
 
 
 if __name__ == "__main__":

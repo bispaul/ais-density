@@ -1,8 +1,9 @@
 [project]
 name = "ais-density"
 version = "0.1.0"
-description = "Add your description here"
+description = "AIS vessel-density pipeline: NOAA AIS → H3 grid → rule-based traffic classification for LA/Long Beach."
 readme = "README.md"
+license = "MIT"
 authors = [{ name = "bispaul", email = "bis.paul@gmail.com" }]
 requires-python = ">=3.12"
 dependencies = [
