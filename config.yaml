@@ -19,9 +19,9 @@ classify:
 regions:
   la_long_beach:
     bbox: [-118.80, 33.30, -117.80, 34.00]
+  houston:
+    bbox: [-95.40, 29.20, -94.40, 29.90]
+    h3:
+      resolution: 9 # narrow ship channel → finer grid
   # sf_bay:
   #   bbox: [-123.00, 37.40, -122.20, 38.20]
-  # houston:
-  #   bbox: [-95.40, 29.20, -94.40, 29.90]
-  #   h3:
-  #     resolution: 9 # optional per-region override (narrow channel → finer grid)

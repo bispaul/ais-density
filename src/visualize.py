@@ -38,19 +38,40 @@ _TOOLTIP_STYLE = {
 }
 
 DOCS_IMG = Path("docs/img")
-TRANSIT_TIF = STATIC_DIR / "transit_2024_la_long_beach.tif"
-LAND_GEOJSON = STATIC_DIR / "land_la_long_beach.geojson"
 
-# The four "neither" residual feature groups from the Referee-A decomposition.
-_NEITHER_FEATURES: list[tuple[float, float, str]] = [
-    (-118.21, 33.73, "Inner-harbor berths"),
-    (-118.48, 33.90, "El Segundo mooring"),
-    (-118.05, 33.60, "Anchorage-F / platform belt"),
-    (-118.33, 33.47, "Outer-basin drift smear"),
-]
 
-# The six maneuvering/harbor cells sit in the LA/LB main channels (Checkpoint 4).
-_MANEUVER_CALLOUT: tuple[float, float, str] = (-118.277, 33.743, "Turning basins")
+def _land_path(region: str) -> Path:
+    return STATIC_DIR / f"land_{region}.geojson"
+
+
+def _transit_path(region: str) -> Path:
+    return STATIC_DIR / f"transit_2024_{region}.tif"
+
+
+def _anchorage_paths(region: str) -> list[Path]:
+    return [
+        STATIC_DIR / f"anchorages_{region}.geojson",
+        STATIC_DIR / f"anchorages_{region}_approach.geojson",
+    ]
+
+
+# Curated validation-panel annotations, per region (empty where none exist).
+_ANNOTATIONS: dict[str, list[tuple[float, float, str]]] = {
+    "la_long_beach": [
+        (-118.21, 33.73, "Inner-harbor berths"),
+        (-118.48, 33.90, "El Segundo mooring"),
+        (-118.05, 33.60, "Anchorage-F / platform belt"),
+        (-118.33, 33.47, "Outer-basin drift smear"),
+    ],
+}
+_MANEUVER_CALLOUTS: dict[str, tuple[float, float, str]] = {
+    "la_long_beach": (-118.277, 33.743, "Turning basins"),
+}
+
+_REGION_LABEL: dict[str, str] = {
+    "la_long_beach": "LA / Long Beach",
+    "houston": "Houston Ship Channel",
+}
 
 
 def _connect() -> DuckDBPyConnection:
@@ -86,12 +107,8 @@ def _hex_layer(records: list[dict[str, Any]], *, stroked: bool = True) -> pdk.La
 def _overlay_layers(region: str) -> list[pdk.Layer]:
     """Shared context: WPI port markers + charted anchorage outlines."""
     layers: list[pdk.Layer] = []
-    anchorages = [
-        STATIC_DIR / "anchorages_la_long_beach.geojson",
-        STATIC_DIR / "anchorages_approach.geojson",
-    ]
     features: list[dict[str, Any]] = []
-    for path in anchorages:
+    for path in _anchorage_paths(region):
         if path.exists():
             features += json.loads(path.read_text()).get("features", [])
     if features:
@@ -364,13 +381,9 @@ def _parse_wkt_polygon(wkt: str) -> list[tuple[float, float]]:
     return pts
 
 
-def _achare_rings() -> list[list[tuple[float, float]]]:
+def _achare_rings(region: str) -> list[list[tuple[float, float]]]:
     rings: list[list[tuple[float, float]]] = []
-    paths = [
-        STATIC_DIR / "anchorages_la_long_beach.geojson",
-        STATIC_DIR / "anchorages_approach.geojson",
-    ]
-    for path in paths:
+    for path in _anchorage_paths(region):
         if not path.exists():
             continue
         for feat in json.loads(path.read_text()).get("features", []):
@@ -384,7 +397,8 @@ def _achare_rings() -> list[list[tuple[float, float]]]:
     return rings
 
 
-def _land_rings(path: Path = LAND_GEOJSON) -> list[list[tuple[float, float]]]:
+def _land_rings(region: str) -> list[list[tuple[float, float]]]:
+    path = _land_path(region)
     if not path.exists():
         return []
     rings: list[list[tuple[float, float]]] = []
@@ -434,7 +448,6 @@ def validation_panel(
     *,
     processed_dir: Path = PROCESSED_DIR,
     out_dir: Path = DOCS_IMG,
-    transit_tif: Path = TRANSIT_TIF,
 ) -> Path | None:
     """Two-panel README validation figure: classified cells vs NOAA transit raster."""
     import matplotlib
@@ -446,8 +459,12 @@ def validation_panel(
 
     win = processed_dir / f"region={region}" / f"window={window_name}"
     classified = win / "cells_classified.parquet"
+    transit_tif = _transit_path(region)
     if not classified.exists():
         logger.warning("skip panel {}/{} — classified parquet missing", region, window_name)
+        return None
+    if not transit_tif.exists():
+        logger.info("skip panel {}/{} — no transit raster for region", region, window_name)
         return None
 
     rows = con.execute(
@@ -472,7 +489,7 @@ def validation_panel(
         ax.tick_params(colors="#8a90a0", labelsize=7)
 
     # Panel (a): land + classified cells + ACHARE outlines + the residual callouts.
-    land = _land_rings()
+    land = _land_rings(region)
     for ring in land:
         ax_a.add_patch(
             Polygon(
@@ -496,7 +513,7 @@ def validation_panel(
                 zorder=2,
             )
         )
-    for ring in _achare_rings():
+    for ring in _achare_rings(region):
         ax_a.add_patch(
             Polygon(
                 ring,
@@ -507,7 +524,7 @@ def validation_panel(
                 zorder=3,
             )
         )
-    for lon, lat, text in _NEITHER_FEATURES:
+    for lon, lat, text in _ANNOTATIONS.get(region, []):
         ax_a.annotate(
             text,
             xy=(lon, lat),
@@ -518,22 +535,24 @@ def validation_panel(
             arrowprops={"arrowstyle": "->", "color": "#e8eaf0", "lw": 0.8},
             bbox={"boxstyle": "round,pad=0.2", "fc": "#11141c", "ec": "none", "alpha": 0.85},
         )
-    m_lon, m_lat, m_text = _MANEUVER_CALLOUT
-    ax_a.annotate(
-        m_text,
-        xy=(m_lon, m_lat),
-        xytext=(m_lon - 0.13, m_lat - 0.12),
-        color="#0d0f16",
-        fontsize=8,
-        ha="center",
-        arrowprops={"arrowstyle": "->", "color": _rgb01(_LABEL_COLOR["maneuvering/harbor"]), "lw": 0.8},
-        bbox={
-            "boxstyle": "round,pad=0.2",
-            "fc": _rgb01(_LABEL_COLOR["maneuvering/harbor"]),
-            "ec": "none",
-            "alpha": 0.9,
-        },
-    )
+    callout = _MANEUVER_CALLOUTS.get(region)
+    if callout is not None:
+        m_lon, m_lat, m_text = callout
+        ax_a.annotate(
+            m_text,
+            xy=(m_lon, m_lat),
+            xytext=(m_lon - 0.13, m_lat - 0.12),
+            color="#0d0f16",
+            fontsize=8,
+            ha="center",
+            arrowprops={"arrowstyle": "->", "color": _rgb01(_LABEL_COLOR["maneuvering/harbor"]), "lw": 0.8},
+            bbox={
+                "boxstyle": "round,pad=0.2",
+                "fc": _rgb01(_LABEL_COLOR["maneuvering/harbor"]),
+                "ec": "none",
+                "alpha": 0.9,
+            },
+        )
     handles = [
         Patch(facecolor=_rgb01(_LABEL_COLOR["shipping lane"]), label="Shipping lane"),
         Patch(
@@ -562,30 +581,20 @@ def validation_panel(
     )
 
     # Panel (b): georeferenced NOAA transit raster, same lon/lat extent.
-    if transit_tif.exists():
-        arr, extent = _load_transit_4326(transit_tif)
-        im = ax_b.imshow(
-            np.log1p(arr),
-            extent=extent,
-            origin="upper",
-            cmap="magma",
-            interpolation="nearest",
-        )
-        cbar = fig.colorbar(im, ax=ax_b, fraction=0.046, pad=0.04)
-        cbar.set_label("log(1 + transits)", color="#e8eaf0", fontsize=8)
-        cbar.ax.yaxis.set_tick_params(color="#8a90a0", labelsize=7)
-        plt.setp(cbar.ax.get_yticklabels(), color="#8a90a0")
-    else:
-        ax_b.text(
-            0.5,
-            0.5,
-            "transit raster unavailable",
-            transform=ax_b.transAxes,
-            color="#8a90a0",
-            ha="center",
-        )
+    arr, extent = _load_transit_4326(transit_tif)
+    im = ax_b.imshow(
+        np.log1p(arr),
+        extent=extent,
+        origin="upper",
+        cmap="magma",
+        interpolation="nearest",
+    )
+    cbar = fig.colorbar(im, ax=ax_b, fraction=0.046, pad=0.04)
+    cbar.set_label("log(1 + transits)", color="#e8eaf0", fontsize=8)
+    cbar.ax.yaxis.set_tick_params(color="#8a90a0", labelsize=7)
+    plt.setp(cbar.ax.get_yticklabels(), color="#8a90a0")
     # Coastline outline on (b) mirrors (a)'s landmask so the two panels register.
-    for ring in _land_rings():
+    for ring in _land_rings(region):
         ax_b.add_patch(
             Polygon(ring, closed=True, fill=False, edgecolor="#6b7280", linewidth=0.6)
         )
@@ -643,7 +652,7 @@ def hero_map(
         spine.set_color("#333844")
     ax.tick_params(colors="#8a90a0", labelsize=7)
 
-    for ring in _land_rings():
+    for ring in _land_rings(region):
         ax.add_patch(
             Polygon(ring, closed=True, facecolor="#242832", edgecolor="#3a4150",
                     linewidth=0.6, zorder=0)
@@ -654,7 +663,8 @@ def hero_map(
             Polygon(_parse_wkt_polygon(wkt), closed=True, facecolor=[c / 255 for c in rgb],
                     edgecolor="none", alpha=0.85, zorder=2)
         )
-    for ring in _achare_rings():
+    achare = _achare_rings(region)
+    for ring in achare:
         ax.add_patch(
             Polygon(ring, closed=True, fill=False, edgecolor=[c / 255 for c in _ACHARE_COLOR],
                     linewidth=0.9, zorder=3)
@@ -663,15 +673,24 @@ def hero_map(
         Patch(facecolor=_rgb01(_LABEL_COLOR["shipping lane"]), label="Shipping lane"),
         Patch(facecolor=_rgb01(_LABEL_COLOR["anchored/moored"]), label="Anchored / moored"),
         Patch(facecolor=_rgb01(_LABEL_COLOR["maneuvering/harbor"]), label="Maneuvering / harbor"),
-        Patch(facecolor="none", edgecolor=_rgb01(_ACHARE_COLOR), label="Charted anchorage (ACHARE)"),
     ]
+    if achare:
+        handles.append(
+            Patch(facecolor="none", edgecolor=_rgb01(_ACHARE_COLOR),
+                  label="Charted anchorage (ACHARE)")
+        )
     leg = ax.legend(handles=handles, loc="lower left", fontsize=8.5, framealpha=0.85)
     leg.get_frame().set_facecolor("#11141c")
     leg.get_frame().set_edgecolor("none")
     for txt in leg.get_texts():
         txt.set_color("#e8eaf0")
+    label = _REGION_LABEL.get(region, region.replace("_", " ").title())
+    res = con.execute(
+        f"SELECT h3_get_resolution(cell) FROM read_parquet('{classified}') LIMIT 1"
+    ).fetchone()
+    res_txt = f", res-{res[0]} H3" if res else ""
     ax.set_title(
-        "LA / Long Beach commercial vessel traffic — July 2024 (res-8 H3, two-gate classifier)",
+        f"{label} commercial vessel traffic — {window_name}{res_txt}, two-gate classifier",
         color="#e8eaf0",
         fontsize=12,
     )

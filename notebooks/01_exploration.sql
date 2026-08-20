@@ -366,7 +366,7 @@ ORDER BY cells DESC;
 -- ══════════════════════════════════════════════════════════════════════════
 WITH anchorage AS (
   SELECT geom FROM ST_Read('data/static/anchorages_la_long_beach.geojson')
-  UNION ALL SELECT geom FROM ST_Read('data/static/anchorages_approach.geojson')
+  UNION ALL SELECT geom FROM ST_Read('data/static/anchorages_la_long_beach_approach.geojson')
 ),
 harbor AS (
   SELECT ST_Buffer(geom, 0.008) AS geom FROM ST_Read('data/static/harbor_wharves_la_long_beach.geojson')
@@ -400,7 +400,7 @@ FROM tagged;
 --     * 10 cells @ ~120 pings — loitering under bare steerageway (post-2021 JIT queuing)
 WITH anchorage AS (
   SELECT geom FROM ST_Read('data/static/anchorages_la_long_beach.geojson')
-  UNION ALL SELECT geom FROM ST_Read('data/static/anchorages_approach.geojson')
+  UNION ALL SELECT geom FROM ST_Read('data/static/anchorages_la_long_beach_approach.geojson')
 ),
 harbor AS (
   SELECT ST_Buffer(geom, 0.008) AS geom FROM ST_Read('data/static/harbor_wharves_la_long_beach.geojson')

@@ -78,6 +78,30 @@ CARTO basemap, hover popups, legend, ACHARE overlay): `classification.html`
 naïve, log colour), and `median_speed.html`. The HTML is gitignored; regenerate it
 with `make visualize`.
 
+## Multiple regions
+
+Adding a region is pure configuration — a bbox and an optional per-region H3
+resolution in `config.yaml`, no code change:
+
+```yaml
+regions:
+  houston:
+    bbox: [-95.40, 29.20, -94.40, 29.90]
+    h3:
+      resolution: 9   # narrow ship channel → finer grid
+```
+
+![Houston Ship Channel commercial traffic](docs/img/hero_houston.png)
+
+The same two-gate classifier resolves the Houston Ship Channel end-to-end: the
+dredged channel reads as one continuous lane from the Bolivar Roads entrance up to
+the Port of Houston turning basins, flanked by the Bolivar Roads anchorage (the
+orange scatter in the bay entrance) and terminal berths along the upper channel.
+At res 9 (finer, for the narrow channel) the month yields 13,725 cells — 497 lane,
+401 anchored, 38 maneuvering. Region-specific reference overlays (ENC anchorages,
+the transit raster) are vendored for LA/Long Beach only, so Houston's validation
+panel is skipped gracefully rather than drawn against the wrong extent.
+
 ## Validation
 
 ![Classified commercial cells vs NOAA transit counts](docs/img/validation_panel_la_long_beach.png)
@@ -207,7 +231,7 @@ Q="query?geometry=-118.80,33.30,-117.80,34.00&geometryType=esriGeometryEnvelope&
 
 # Anchorage areas (S-57 ACHARE): harbour scale (layer 186) + approach scale (191)
 curl -s "$BASE/enc_harbour/MapServer/186/$Q" -o data/static/anchorages_la_long_beach.geojson
-curl -s "$BASE/enc_approach/MapServer/191/$Q" -o data/static/anchorages_approach.geojson
+curl -s "$BASE/enc_approach/MapServer/191/$Q" -o data/static/anchorages_la_long_beach_approach.geojson
 ```
 
 Discover layer IDs by browsing `"$BASE/enc_harbour/MapServer/layers?f=json"`.
