@@ -49,18 +49,20 @@ each ~1 s, so ingest dominates.
    Rey, the small-craft basins). Restricting to the cargo + tanker stratum, with
    its own density gate, isolates the shipping corridors and terminal approaches
    the hero map shows.
-2. **More data sharpens the anchored class onto charted anchorages.** At 7 days
-   only 34 % of commercial `anchored/moored` cells fell inside charted ENC
-   anchorages; at 30 days it is **56 %**. The higher ping-density gate (P90 pings
-   77 → 279) drops the transient low-persistence drift cells, concentrating the
-   set on genuine anchorages. The anchored-cell set has a Jaccard of **0.53**
-   between the 7-day and 30-day runs — a stable persistent core with a
-   gate-sensitive margin, exactly as expected.
+2. **More data sharpens the anchored class onto charted anchorages.** Rules and
+   quantile levels were fixed on a 7-day development window and applied unchanged
+   to the full month. At 7 days only 34 % of commercial `anchored/moored` cells
+   fell inside charted ENC anchorages; at 30 days it is **56 %**. The higher
+   ping-density gate (P90 pings 77 → 279) drops the transient low-persistence
+   drift cells, concentrating the set on genuine anchorages. The anchored-cell set
+   has a Jaccard of **0.53** between the 7-day and 30-day runs — a stable
+   persistent core with a gate-sensitive margin, exactly as expected.
 3. **The residual "neither" anchored cells decompose into four traceable
    signatures** — inner-harbor terminal berths, the El Segundo offshore mooring
    terminal, high-persistence holding adjacent to Anchorage F / the platform belt,
-   and a diffuse outer-basin drift smear toward Catalina (JIT queuing). None is a
-   classifier error; see [Validation](#validation) and [Limitations](#limitations).
+   and a diffuse outer-basin drift smear toward Catalina (consistent with JIT
+   queuing). None is a classifier error; see [Validation](#validation) and
+   [Limitations](#limitations).
 4. **A July 4th holiday-weekend fleet uptick.** Distinct vessels rise from a
    Mon–Wed baseline of 805–860 to 921 on July 4 and stay elevated through the
    weekend (894–934 on July 5–7). The scheduled cargo/tanker fleet does not swing
@@ -86,7 +88,9 @@ Transit Counts raster, georeferenced from its native EPSG:3857 to the same lon/l
 extent and coloured by `log(1 + transits)`. The classifier's lanes in (a) trace
 the same corridors the independent transit raster lights up in (b): the twin
 traffic-separation-scheme parallels from the northwest, the southeast departure
-fan, and the harbour-entrance hotspot.
+fan, and the harbour-entrance hotspot. Quantitatively, **lane cells carry ~10× the
+transit-count background and sit above the raster's own p90** — the single most
+citable check that the classifier lands on genuine NOAA traffic corridors.
 
 The labels are cross-checked against three independent references:
 
@@ -109,6 +113,8 @@ raster) is documented under [Reference data](#reference-data).
 ## How to run
 
 ### Setup
+
+Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
@@ -289,6 +295,15 @@ Files land in `data/raw/` and their sha256 is tracked in `data/raw/registry.txt`
   directly comparable across speeds.
 - **Single month, single year.** All findings are for July 2024; seasonal and
   year-over-year variation is out of scope for v1.
+- **Charted-anchorage agreement is a joint property of classifier *and* chart
+  era.** The 56 % figure scores 2024 vessel behavior against present-vintage ENC
+  `ACHARE` polygons (post-JIT-reform anchorage layouts). A temporal skew between
+  the AIS window and the chart edition shifts the agreement independently of
+  classifier quality, so read the 56 % as corroboration, not a precision score.
+- **`maneuvering/harbor` is under-defined.** It is a small residual class (3 cells
+  at 30 days) that catches commercial cells clearing the vessel-count gate but
+  falling between the anchored and lane speed thresholds — real (the harbor
+  turning basins) but thinly populated and sensitive to the threshold placement.
 - **Berth vs anchorage not split (v1).** Both are labelled `anchored/moored`;
   distinguishing a terminal berth from an anchorage is out of scope.
 - **`vessel_type` is self-reported.** AIS ship-type codes are operator-declared
