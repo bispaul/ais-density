@@ -102,6 +102,20 @@ At res 9 (finer, for the narrow channel) the month yields 13,725 cells — 497 l
 the transit raster) are vendored for LA/Long Beach only, so Houston's validation
 panel is skipped gracefully rather than drawn against the wrong extent.
 
+**Houston is a demonstration region, held to a lower bar than LA/Long Beach.**
+Two caveats apply. First, windows in `config.yaml` are global — every window is
+applied to every region as a cross product — so declaring `jan_2024` also
+processes Houston for January (there is no per-region window selection). Second,
+the classifier uses the same global `classify` gates and sanity band, both
+calibrated on LA; Houston's denser, res-9 ship-channel geometry produces far more
+cells and trips those sanity warnings (hundreds of lane/anchored cells vs LA's
+dozens). Houston's labels are directionally correct — the hero reads cleanly — but
+they are **not** validated to LA's three-referee standard, and no Houston-specific
+ENC or transit reference data is vendored. Treat Houston as proof that a new
+region is config-only, not as a tuned, validated result. The showcase hero and
+validation panel are rendered for the first-configured (primary) window only; the
+seasonal diff below is the cross-window artifact.
+
 ## Seasonal comparison (January vs July 2024)
 
 Running the same pipeline over a second 31-day window (January 2024) and diffing

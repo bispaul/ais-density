@@ -709,13 +709,15 @@ def visualize_all(
     con = _connect()
     outputs: dict[str, dict[str, dict[str, Path]]] = {}
     window_names = list(config.windows)
+    primary = window_names[0]  # hero/panel are showcase figures for one window
     for region, region_cfg in config.regions.items():
         for window_name in config.windows:
             result = visualize_window(con, region, window_name, region_cfg, force=force)
             if result:
                 outputs.setdefault(region, {})[window_name] = result
-                validation_panel(con, region, window_name, region_cfg)
-                hero_map(con, region, window_name, region_cfg)
+                if window_name == primary:
+                    validation_panel(con, region, window_name, region_cfg)
+                    hero_map(con, region, window_name, region_cfg)
         if len(window_names) >= 2:
             temporal_diff(con, region, window_names[0], window_names[1], region_cfg)
     return outputs
@@ -836,11 +838,13 @@ def main() -> None:
 
     con = _connect()
     region_cfg = config.regions[args.region]
+    window_names = list(config.windows)
+    primary = window_names[0]  # hero/panel are showcase figures for one window
     for window_name in config.windows:
         visualize_window(con, args.region, window_name, region_cfg, force=args.force)
-        validation_panel(con, args.region, window_name, region_cfg)
-        hero_map(con, args.region, window_name, region_cfg)
-    window_names = list(config.windows)
+        if window_name == primary:
+            validation_panel(con, args.region, window_name, region_cfg)
+            hero_map(con, args.region, window_name, region_cfg)
     if len(window_names) >= 2:
         temporal_diff(con, args.region, window_names[0], window_names[1], region_cfg)
 
