@@ -203,6 +203,15 @@ make lint            # ruff check + mypy (strict, scoped to src/)
 uv run pytest        # tests
 ```
 
+The shipped `config.yaml` declares **two regions** (LA/Long Beach, Houston) and
+**two windows** (July and January 2024), so a fresh `make all` downloads all 62
+raw daily files (~15 GB; NOAA's endpoint is slow and throttles, but the downloader
+retries) and processes every region × window pair. To reproduce a single
+figure faster, trim `config.yaml` to just the region/window you need, or run the
+stages scoped: `make download` for one window, then `uv run python -m src.grid
+--region <r>` / `--region <r>` on `classify`/`visualize`. Raw files are cached and
+hash-verified, so re-runs only fetch what's missing.
+
 Each stage is also a standalone target; pass flags through `ARGS`:
 
 ```bash
