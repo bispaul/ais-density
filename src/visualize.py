@@ -17,12 +17,24 @@ MAPS_DIR = Path("maps")
 
 CARTO_DARK = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
 
-# Categorical colours for the hero classification layer (RGB).
+# Okabe-Ito colourblind-safe categorical palette for the hero layer (RGB).
 _LABEL_COLOR: dict[str, list[int]] = {
-    "shipping lane": [46, 134, 222],
-    "anchored/moored": [235, 77, 75],
-    "maneuvering/harbor": [240, 147, 43],
-    "unclassified": [70, 74, 92],
+    "shipping lane": [86, 180, 233],  # sky blue
+    "anchored/moored": [213, 94, 0],  # vermillion
+    "maneuvering/harbor": [240, 228, 66],  # yellow
+}
+
+_ACHARE_COLOR = [80, 220, 120]
+# Sequential ramp mirroring _ramp() stops, for the density/speed legend bars.
+_RAMP_CSS = "linear-gradient(90deg, rgb(13,8,135), rgb(204,71,120), rgb(240,249,33))"
+_TOOLTIP_STYLE = {
+    "backgroundColor": "#11141c",
+    "color": "#e8eaf0",
+    "fontSize": "12px",
+    "fontFamily": "-apple-system, Segoe UI, Roboto, sans-serif",
+    "borderRadius": "6px",
+    "padding": "6px 9px",
+    "boxShadow": "0 2px 8px rgba(0,0,0,0.4)",
 }
 
 
@@ -40,7 +52,7 @@ def _ramp(t: float) -> list[int]:
     return [round(a[i] + (b[i] - a[i]) * f) for i in range(3)]
 
 
-def _hex_layer(records: list[dict[str, Any]]) -> pdk.Layer:
+def _hex_layer(records: list[dict[str, Any]], *, stroked: bool = True) -> pdk.Layer:
     return pdk.Layer(
         "H3HexagonLayer",
         data=records,
@@ -48,10 +60,11 @@ def _hex_layer(records: list[dict[str, Any]]) -> pdk.Layer:
         get_fill_color="color",
         get_line_color=[255, 255, 255, 40],
         filled=True,
-        stroked=True,
+        stroked=stroked,
         extruded=False,
-        opacity=0.55,
+        opacity=0.65,
         pickable=True,
+        auto_highlight=True,
     )
 
 
@@ -73,8 +86,8 @@ def _overlay_layers(region: str) -> list[pdk.Layer]:
                 data={"type": "FeatureCollection", "features": features},
                 stroked=True,
                 filled=False,
-                get_line_color=[80, 220, 120],
-                line_width_min_pixels=1,
+                get_line_color=_ACHARE_COLOR,
+                line_width_min_pixels=2,
             )
         )
     return layers
@@ -90,14 +103,81 @@ def _view(region_cfg: Region) -> pdk.ViewState:
     )
 
 
-def _deck(hexes: list[dict[str, Any]], region: str, region_cfg: Region, tooltip: str) -> pdk.Deck:
+def _deck(
+    hexes: list[dict[str, Any]],
+    region: str,
+    region_cfg: Region,
+    tooltip: str,
+    *,
+    stroked: bool = True,
+) -> pdk.Deck:
     return pdk.Deck(
-        layers=[_hex_layer(hexes), *_overlay_layers(region)],
+        layers=[_hex_layer(hexes, stroked=stroked), *_overlay_layers(region)],
         initial_view_state=_view(region_cfg),
         map_provider="carto",
         map_style=CARTO_DARK,
-        tooltip={"text": tooltip},
+        tooltip={"html": tooltip, "style": _TOOLTIP_STYLE},
     )
+
+
+def _legend_categorical() -> str:
+    items = (
+        ("Shipping lane", _LABEL_COLOR["shipping lane"]),
+        ("Anchored / moored", _LABEL_COLOR["anchored/moored"]),
+        ("Maneuvering / harbor", _LABEL_COLOR["maneuvering/harbor"]),
+    )
+    rows = "".join(
+        f'<div class="ais-row"><span class="ais-swatch" '
+        f'style="background:rgb({c[0]},{c[1]},{c[2]})"></span>{name}</div>'
+        for name, c in items
+    )
+    achare = (
+        '<div class="ais-row"><span class="ais-swatch" style="background:transparent;'
+        f'border:2px solid rgb({_ACHARE_COLOR[0]},{_ACHARE_COLOR[1]},{_ACHARE_COLOR[2]})">'
+        "</span>Charted anchorage (ACHARE)</div>"
+    )
+    return rows + achare
+
+
+def _legend_gradient(lo: str, hi: str) -> str:
+    return (
+        f'<div class="ais-bar" style="background:{_RAMP_CSS}"></div>'
+        f'<div class="ais-scale"><span>{lo}</span><span>{hi}</span></div>'
+    )
+
+
+def _inject_panels(
+    path: Path, *, title: str, caption: str, legend_title: str, legend_body: str
+) -> None:
+    """Inject a title/caption panel and a legend into a pydeck HTML export."""
+    css = (
+        "<style>"
+        ".ais-panel,.ais-legend{position:absolute;z-index:10;"
+        "font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#e8eaf0;"
+        "background:rgba(17,20,28,0.82);border:1px solid rgba(255,255,255,0.08);"
+        "border-radius:8px;padding:10px 12px;backdrop-filter:blur(3px);}"
+        ".ais-panel{top:12px;left:12px;max-width:360px;pointer-events:none;}"
+        ".ais-panel h1{font-size:15px;margin:0 0 4px;font-weight:600;}"
+        ".ais-panel p{font-size:11px;margin:0;color:#aab0be;line-height:1.4;}"
+        ".ais-legend{bottom:28px;left:12px;font-size:12px;min-width:150px;}"
+        ".ais-legend .ais-head{font-size:10px;text-transform:uppercase;"
+        "letter-spacing:.06em;color:#aab0be;margin-bottom:7px;}"
+        ".ais-row{display:flex;align-items:center;gap:8px;margin:4px 0;}"
+        ".ais-swatch{width:13px;height:13px;border-radius:3px;flex:none;}"
+        ".ais-bar{width:100%;height:11px;border-radius:3px;}"
+        ".ais-scale{display:flex;justify-content:space-between;font-size:10px;"
+        "color:#aab0be;margin-top:4px;}"
+        "</style>"
+    )
+    panel = f'<div class="ais-panel"><h1>{title}</h1><p>{caption}</p></div>'
+    legend = (
+        f'<div class="ais-legend"><div class="ais-head">{legend_title}</div>'
+        f"{legend_body}</div>"
+    )
+    html = path.read_text()
+    html = html.replace("</head>", css + "</head>", 1)
+    html = html.replace("</body>", panel + legend + "</body>", 1)
+    path.write_text(html)
 
 
 def visualize_window(
@@ -127,7 +207,7 @@ def visualize_window(
     rows = con.execute(
         "SELECT h3_h3_to_string(cell) AS hex, label, vessels, pings, "
         f"round(median_sog, 1) AS med_sog FROM read_parquet('{classified}') "
-        "WHERE stratum = 'commercial'"
+        "WHERE stratum = 'commercial' AND label <> 'unclassified'"
     ).fetchall()
     hero = [
         {
@@ -160,19 +240,74 @@ def visualize_window(
     ).fetchall()
     speed = _speed_records(spd)
 
-    views = {
-        "classification": (hero, "{label}\nvessels: {vessels}  pings: {pings}\nmed sog: {med_sog}"),
-        "commercial_density": (comm_density, "commercial vessels: {vessels}"),
-        "all_traffic_density": (all_density, "all vessels: {vessels}"),
-        "median_speed": (speed, "median sog: {med_sog}"),
+    comm_max = max((r["vessels"] for r in comm_density), default=1)
+    all_max = max((r["vessels"] for r in all_density), default=1)
+
+    views: dict[str, dict[str, Any]] = {
+        "classification": {
+            "data": hero,
+            "stroked": True,
+            "tooltip": (
+                "<b>{label}</b><br/>vessels {vessels} &middot; pings {pings}"
+                "<br/>median SOG {med_sog} kn"
+            ),
+            "title": "Commercial traffic classification",
+            "caption": (
+                "Cargo &amp; tanker cells, res-8 H3, two-gate classifier (SOG + density). "
+                "Lane cells at res 8; discontinuities reflect the P90 density gate. "
+                "Unclassified cells omitted for clarity."
+            ),
+            "legend_title": "Classification",
+            "legend": _legend_categorical(),
+        },
+        "commercial_density": {
+            "data": comm_density,
+            "stroked": False,
+            "tooltip": "<b>Commercial density</b><br/>{vessels} unique vessels",
+            "title": "Commercial vessel density",
+            "caption": "Unique cargo/tanker vessels per res-8 cell, log colour scale.",
+            "legend_title": "Unique vessels (log)",
+            "legend": _legend_gradient("1", str(comm_max)),
+        },
+        "all_traffic_density": {
+            "data": all_density,
+            "stroked": False,
+            "tooltip": "<b>All-traffic density</b><br/>{vessels} unique vessels",
+            "title": "All-traffic density (na\u00efve view)",
+            "caption": (
+                "Every vessel class per res-8 cell, log scale. Marinas dominate \u2014 "
+                "contrast with the stratified commercial view."
+            ),
+            "legend_title": "Unique vessels (log)",
+            "legend": _legend_gradient("1", str(all_max)),
+        },
+        "median_speed": {
+            "data": speed,
+            "stroked": False,
+            "tooltip": "<b>Median speed</b><br/>{med_sog} kn",
+            "title": "Median speed over ground",
+            "caption": "Per-cell median SOG; lanes run fast, anchorages near zero.",
+            "legend_title": "Median SOG (kn)",
+            "legend": _legend_gradient("0", "15+"),
+        },
     }
-    for name, (data, tip) in views.items():
+    for name, spec in views.items():
         out = out_dir / f"{name}.html"
         if out.exists() and not force:
             logger.info("skip {}/{} {} — exists", region, window_name, name)
             outputs[name] = out
             continue
-        _deck(data, region, region_cfg, tip).to_html(str(out), notebook_display=False)
+        deck = _deck(
+            spec["data"], region, region_cfg, spec["tooltip"], stroked=spec["stroked"]
+        )
+        deck.to_html(str(out), notebook_display=False)
+        _inject_panels(
+            out,
+            title=spec["title"],
+            caption=spec["caption"],
+            legend_title=spec["legend_title"],
+            legend_body=spec["legend"],
+        )
         outputs[name] = out
 
     logger.info("{}/{}: wrote {} maps -> {}", region, window_name, len(outputs), out_dir)
