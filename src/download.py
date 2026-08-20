@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import time
 from datetime import date
 from pathlib import Path
 
@@ -13,6 +14,12 @@ BASE_URL = "https://noaaocm.blob.core.windows.net/ais/csv2"
 REGISTRY_PATH = RAW_DIR / "registry.txt"
 
 _CHUNK = 1 << 20
+# NOAA's blob endpoint occasionally stalls; cap the read wait and retry rather
+# than letting a single hung socket abort a 30-day download.
+_CONNECT_TIMEOUT_S = 10
+_READ_TIMEOUT_S = 120
+_MAX_RETRIES = 5
+_RETRY_WAIT_S = 5
 
 # We log downloads ourselves and record hashes in the registry, so silence
 # pooch's per-file URL and "use this value as known_hash" notices.
@@ -51,6 +58,37 @@ def _url_for(day: date) -> str:
     return f"{BASE_URL}/csv{day:%Y}/ais-{day:%Y-%m-%d}.csv.zst"
 
 
+def _retrieve(url: str, known_hash: str | None, fname: str, raw_dir: Path) -> str:
+    """pooch.retrieve with a bounded read timeout and bounded retries."""
+    downloader = pooch.HTTPDownloader(
+        progressbar=True, timeout=(_CONNECT_TIMEOUT_S, _READ_TIMEOUT_S)
+    )
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            return str(
+                pooch.retrieve(
+                    url=url,
+                    known_hash=known_hash,
+                    fname=fname,
+                    path=raw_dir,
+                    downloader=downloader,
+                )
+            )
+        except OSError as exc:  # requests ConnectionError/ReadTimeout subclass OSError
+            if attempt == _MAX_RETRIES:
+                raise
+            logger.warning(
+                "attempt {}/{} failed for {} ({}); retrying in {}s",
+                attempt,
+                _MAX_RETRIES,
+                fname,
+                exc,
+                _RETRY_WAIT_S * attempt,
+            )
+            time.sleep(_RETRY_WAIT_S * attempt)
+    raise RuntimeError("unreachable")
+
+
 def download_day(
     day: date,
     registry: dict[str, str],
@@ -77,12 +115,11 @@ def download_day(
         dest.unlink()
 
     logger.info("downloading {}", fname)
-    fetched = pooch.retrieve(
-        url=_url_for(day),
-        known_hash=f"sha256:{known}" if known and not force else None,
-        fname=fname,
-        path=raw_dir,
-        progressbar=True,
+    fetched = _retrieve(
+        _url_for(day),
+        f"sha256:{known}" if known and not force else None,
+        fname,
+        raw_dir,
     )
     registry[fname] = _sha256(Path(fetched))
     return Path(fetched)

@@ -2,7 +2,7 @@
 windows:
   jul_2024:
     start: 2024-07-01
-    end: 2024-07-07 # widen to 07-31 for the final run
+    end: 2024-07-31
   # jul_2025:                # uncomment at stretch-goal time
   #   start: 2025-07-01
   #   end:   2025-07-31
